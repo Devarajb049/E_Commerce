@@ -1,0 +1,64 @@
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 15000,
+});
+
+// Response interceptor for consistent error messaging
+apiClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    let friendlyMessage = 'An unexpected error occurred. Please try again.';
+    if (error.response?.data?.message) {
+      friendlyMessage = error.response.data.message;
+    } else if (error.code === 'ECONNABORTED') {
+      friendlyMessage = 'Server request timed out. Please check your connection.';
+    } else if (error.message === 'Network Error') {
+      friendlyMessage = 'Unable to connect to ClickCart server. Ensure backend is running.';
+    }
+
+    const customError = new Error(friendlyMessage);
+    customError.status = error.response?.status;
+    customError.data = error.response?.data;
+    return Promise.reject(customError);
+  }
+);
+
+export const api = {
+  // Categories
+  getCategories: () => apiClient.get('/categories'),
+  getCategory: (id) => apiClient.get(`/categories/${id}`),
+  createCategory: (data) => apiClient.post('/categories', data),
+  updateCategory: (id, data) => apiClient.put(`/categories/${id}`, data),
+  deleteCategory: (id) => apiClient.delete(`/categories/${id}`),
+
+  // Products
+  getProducts: (params = {}) => apiClient.get('/products', { params }),
+  getProduct: (id) => apiClient.get(`/products/${id}`),
+  createProduct: (data) => apiClient.post('/products', data),
+  updateProduct: (id, data) => apiClient.put(`/products/${id}`, data),
+  deleteProduct: (id) => apiClient.delete(`/products/${id}`),
+
+  // Orders
+  createOrder: (orderData) => apiClient.post('/orders', orderData),
+  getOrders: (params = {}) => apiClient.get('/orders', { params }),
+  getOrder: (id) => apiClient.get(`/orders/${id}`),
+  updateOrderStatus: (id, status) => apiClient.put(`/orders/${id}/status`, { status }),
+
+  // Reports
+  getSummary: () => apiClient.get('/reports/summary'),
+  getSalesByCategory: () => apiClient.get('/reports/sales-by-category'),
+  getTopProducts: () => apiClient.get('/reports/top-products'),
+  getDailySales: () => apiClient.get('/reports/daily-sales'),
+
+  // Health
+  getHealth: () => apiClient.get('/health')
+};
+
+export default api;

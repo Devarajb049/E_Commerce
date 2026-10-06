@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" width="200" height="48" fill="none">
+  <!-- ICON SECTION -->
+  <g transform="translate(0, 0)">
+    <!-- Click ripples -->
+    <circle cx="34" cy="12" r="5" stroke="#F97316" stroke-width="1.5" stroke-dasharray="2 3" opacity="0.6" />
+    <circle cx="34" cy="12" r="8" stroke="#F97316" stroke-width="1.5" opacity="0.3" />
+
+    <!-- Shopping Cart Body (Indigo #4F46E5) -->
+    <path d="M6 10H11L14.5 27H33L36.5 16H13.5" 
+          stroke="#4F46E5" 
+          stroke-width="3" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+    
+    <!-- Cart Wheels -->
+    <circle cx="16.5" cy="35.5" r="3.5" fill="#4F46E5" />
+    <circle cx="31" cy="35.5" r="3.5" fill="#4F46E5" />
+
+    <!-- Mouse Pointer Cursor (Orange #F97316) -->
+    <path d="M34 12L34 23.5L37.5 20L41 26.5L43.5 25L40 18.5L44.5 18L34 12Z" 
+          fill="#F97316" 
+          stroke="#FFFFFF" 
+          stroke-width="1.5" 
+          stroke-linejoin="round" />
+    <circle cx="34" cy="12" r="1.5" fill="#F97316" />
+  </g>
+
+  <!-- WORDMARK: ClickCart -->
+  <text x="52" y="32" 
+        font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+        font-size="24" 
+        font-weight="700" 
+        letter-spacing="-0.5">
+    <tspan fill="#111827">Click</tspan><tspan fill="#4F46E5">Cart</tspan>
+  </text>
+</svg>
