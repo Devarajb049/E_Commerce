@@ -2,48 +2,59 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const EmptyState = ({
+  icon: Icon = null,
   title = 'No items found',
-  message = 'We could not find anything matching your request.',
-  actionLabel = 'Explore Products',
+  message,
+  description,
+  actionLabel,
+  actionText,
   actionLink = '/products',
   onActionClick = null,
+  onAction = null,
   showAction = true
 }) => {
+  const displayDesc = description || message || 'We could not find anything matching your request.';
+  const displayLabel = actionText || actionLabel || 'Explore Products';
+  const handleAction = onAction || onActionClick;
+
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center max-w-md mx-auto">
-      {/* ClickCart Vector Icon Illustration */}
-      <div className="w-20 h-20 rounded-3xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-center mb-6 shadow-sm">
-        <img 
-          src="/logo-icon.svg" 
-          alt="ClickCart Empty" 
-          className="w-12 h-12 object-contain opacity-80" 
-        />
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center max-w-sm mx-auto">
+      <div className="w-12 h-12 rounded-card bg-gray-100 border border-brand-border flex items-center justify-center mb-3.5 text-gray-400">
+        {Icon ? (
+          <Icon className="w-6 h-6 text-gray-400" />
+        ) : (
+          <img 
+            src="/logo-icon.svg" 
+            alt="ClickCart Empty" 
+            className="w-7 h-7 opacity-40 grayscale" 
+          />
+        )}
       </div>
 
-      <h3 className="text-xl font-bold text-brand-dark mb-2 tracking-tight">
+      <h3 className="text-sm font-bold text-brand-dark mb-1">
         {title}
       </h3>
       
-      <p className="text-sm text-brand-muted leading-relaxed mb-6">
-        {message}
+      <p className="text-xs text-brand-muted leading-relaxed mb-4">
+        {displayDesc}
       </p>
 
       {showAction && (
-        onActionClick ? (
+        handleAction ? (
           <button
-            onClick={onActionClick}
-            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-indigo hover:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-indigo/50 active:scale-[0.98]"
+            onClick={handleAction}
+            className="btn-primary text-xs py-2 px-3.5"
           >
-            {actionLabel}
+            {displayLabel}
           </button>
-        ) : (
+        ) : actionLink ? (
           <Link
             to={actionLink}
-            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-indigo hover:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-indigo/50 active:scale-[0.98]"
+            className="btn-primary text-xs py-2 px-3.5"
           >
-            {actionLabel}
+            {displayLabel}
           </Link>
-        )
+        ) : null
       )}
     </div>
   );

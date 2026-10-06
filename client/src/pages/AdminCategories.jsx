@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, FolderTree, AlertCircle, X, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, AlertCircle, X, Search, FolderTree } from 'lucide-react';
 import api from '../services/api';
-import AdminNav from '../components/AdminNav';
-import LoadingSpinner from '../components/LoadingSpinner';
+import AdminLayout from '../components/AdminLayout';
+import { TableSkeleton } from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
 import { useToast } from '../context/ToastContext';
 
 const AdminCategories = () => {
@@ -10,6 +11,7 @@ const AdminCategories = () => {
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,6 +40,16 @@ const AdminCategories = () => {
     fetchCategories();
   }, []);
 
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return categories;
+    const q = searchQuery.toLowerCase();
+    return categories.filter(
+      (c) =>
+        c.category_name.toLowerCase().includes(q) ||
+        (c.description && c.description.toLowerCase().includes(q))
+    );
+  }, [categories, searchQuery]);
+
   const openAddModal = () => {
     setEditingCategory(null);
     setCategoryName('');
@@ -62,7 +74,7 @@ const AdminCategories = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!categoryName.trim()) {
-      setFormError('Category name cannot be empty.');
+      setFormError('Category name is required.');
       return;
     }
 
@@ -78,14 +90,14 @@ const AdminCategories = () => {
       if (editingCategory) {
         const res = await api.updateCategory(editingCategory.category_id, payload);
         if (res.success) {
-          success(`Category '${res.data.category_name}' updated successfully!`);
+          success(`Category "${res.data.category_name}" updated.`);
           closeModal();
           fetchCategories();
         }
       } else {
         const res = await api.createCategory(payload);
         if (res.success) {
-          success(`Category '${res.data.category_name}' created successfully!`);
+          success(`Category "${res.data.category_name}" created.`);
           closeModal();
           fetchCategories();
         }
@@ -93,7 +105,7 @@ const AdminCategories = () => {
     } catch (err) {
       console.error('Save category error:', err);
       setFormError(err.message || 'Failed to save category.');
-      toastError(err.message || 'Error occurred.');
+      toastError(err.message || 'Error saving category.');
     } finally {
       setSubmitting(false);
     }
@@ -103,98 +115,116 @@ const AdminCategories = () => {
     try {
       const res = await api.deleteCategory(categoryId);
       if (res.success) {
-        success('Category deleted successfully.');
+        success('Category removed successfully.');
         setDeleteConfirmId(null);
         fetchCategories();
       }
     } catch (err) {
       console.error('Delete category error:', err);
-      toastError(err.message || 'Cannot delete category.');
+      toastError(err.message || 'Cannot delete category with active products.');
       setDeleteConfirmId(null);
     }
   };
 
   return (
-    <div className="space-y-8 pb-16">
-      <AdminNav />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-extrabold text-brand-dark tracking-tight">
-              Category Department Management
-            </h2>
-            <p className="text-sm text-brand-muted">
-              Organize product collections and catalog navigation departments.
-            </p>
+    <AdminLayout
+      title="Categories"
+      subtitle="Organize product catalog departments and navigation taxonomy"
+      actions={
+        <button
+          onClick={openAddModal}
+          className="btn-primary text-xs py-2 px-3.5"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Category</span>
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        {/* Search bar */}
+        <div className="bg-white border border-brand-border rounded-card p-3 shadow-subtle flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter categories by name or description..."
+              className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-brand-border rounded-btn text-xs text-brand-dark focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-indigo/20 focus:border-brand-indigo transition-all"
+            />
           </div>
-
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-indigo text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-indigo/50 self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Category</span>
-          </button>
+          <span className="text-xs text-brand-muted hidden sm:inline">
+            Showing {filteredCategories.length} of {categories.length} departments
+          </span>
         </div>
 
-        {/* Categories Table */}
-        <div className="bg-white border border-brand-border rounded-3xl shadow-xs overflow-hidden">
+        {/* Table Surface */}
+        <div className="bg-white border border-brand-border rounded-card shadow-subtle overflow-hidden">
           {loading ? (
-            <LoadingSpinner message="Retrieving departments..." />
+            <TableSkeleton rows={6} />
+          ) : filteredCategories.length === 0 ? (
+            <div className="p-12 text-center">
+              <EmptyState
+                icon={FolderTree}
+                title="No categories found"
+                description={searchQuery ? 'Try adjusting your search query.' : 'Get started by creating your first product category.'}
+                actionText={searchQuery ? 'Clear Search' : 'Add Category'}
+                onAction={searchQuery ? () => setSearchQuery('') : openAddModal}
+              />
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100 text-brand-muted uppercase tracking-wider text-[11px]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 border-b border-brand-border text-gray-500 uppercase tracking-wider font-semibold text-[11px]">
                   <tr>
-                    <th className="py-3.5 px-6 font-bold w-16">ID</th>
-                    <th className="py-3.5 px-6 font-bold">Category Name</th>
-                    <th className="py-3.5 px-6 font-bold">Description</th>
-                    <th className="py-3.5 px-6 font-bold text-center">Assigned Products</th>
-                    <th className="py-3.5 px-6 font-bold text-right">Actions</th>
+                    <th className="py-3 px-4 w-14">ID</th>
+                    <th className="py-3 px-4 font-semibold">Category Name</th>
+                    <th className="py-3 px-4 font-semibold">Description</th>
+                    <th className="py-3 px-4 font-semibold text-center w-36">Assigned Products</th>
+                    <th className="py-3 px-4 font-semibold text-right w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {categories.map((c) => (
-                    <tr key={c.category_id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="py-4 px-6 font-mono text-gray-400 font-semibold">
+                  {filteredCategories.map((c) => (
+                    <tr key={c.category_id} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="py-3.5 px-4 font-mono text-gray-400 font-medium">
                         #{c.category_id}
                       </td>
 
-                      <td className="py-4 px-6">
-                        <span className="font-bold text-brand-dark block text-sm sm:text-base">
+                      <td className="py-3.5 px-4">
+                        <span className="font-semibold text-brand-dark text-sm">
                           {c.category_name}
                         </span>
                       </td>
 
-                      <td className="py-4 px-6 text-brand-muted text-xs max-w-md truncate">
-                        {c.description || 'No description provided.'}
+                      <td className="py-3.5 px-4 text-brand-muted max-w-md truncate">
+                        {c.description || '—'}
                       </td>
 
-                      <td className="py-4 px-6 text-center">
-                        <span className="inline-block px-2.5 py-1 bg-indigo-50 text-brand-indigo font-bold rounded-lg text-xs">
-                          {c.product_count} items
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-block px-2.5 py-0.5 bg-indigo-50 border border-indigo-100 text-brand-indigo font-semibold rounded-btn text-xs">
+                          {c.product_count} {c.product_count === 1 ? 'item' : 'items'}
                         </span>
                       </td>
 
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openEditModal(c)}
-                            className="p-1.5 text-gray-500 hover:text-brand-indigo hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Edit category"
+                            className="p-1.5 text-gray-500 hover:text-brand-indigo hover:bg-gray-100 rounded-btn transition-colors"
+                            title="Edit Category"
+                            aria-label={`Edit ${c.category_name}`}
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
 
                           <button
                             onClick={() => setDeleteConfirmId(c.category_id)}
-                            className="p-1.5 text-gray-500 hover:text-brand-error hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete category"
+                            className="p-1.5 text-gray-500 hover:text-brand-error hover:bg-red-50 rounded-btn transition-colors"
+                            title="Delete Category"
+                            aria-label={`Delete ${c.category_name}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -205,69 +235,72 @@ const AdminCategories = () => {
             </div>
           )}
         </div>
-
       </div>
 
       {/* ADD / EDIT MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-brand-dark">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white rounded-modal border border-brand-border max-w-md w-full p-6 shadow-dropdown space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-brand-border">
+              <h3 className="text-base font-bold text-brand-dark">
                 {editingCategory ? 'Edit Category' : 'Add New Category'}
               </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
+              <button
+                onClick={closeModal}
+                className="p-1 text-gray-400 hover:text-brand-dark rounded-btn hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {formError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-btn text-brand-error text-xs">
                 {formError}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-brand-muted mb-1">
-                  Category Name *
+                <label className="block text-xs font-semibold text-brand-dark mb-1">
+                  Category Name <span className="text-brand-error">*</span>
                 </label>
                 <input
                   type="text"
                   value={categoryName}
                   onChange={(e) => setCategoryName(e.target.value)}
                   placeholder="e.g. Smart Wearables"
-                  className="w-full px-3.5 py-2 border rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-indigo/30 focus:border-brand-indigo outline-none"
+                  className="form-input text-xs"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-brand-muted mb-1">
+                <label className="block text-xs font-semibold text-brand-dark mb-1">
                   Description
                 </label>
                 <textarea
                   rows="3"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Short description of products in this department..."
-                  className="w-full px-3.5 py-2 border rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-indigo/30 focus:border-brand-indigo outline-none"
+                  placeholder="Short description of products categorized under this department..."
+                  className="form-input text-xs resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-brand-border">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  className="btn-secondary text-xs py-2 px-3.5"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-brand-indigo hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50"
+                  className="btn-primary text-xs py-2 px-4"
                 >
-                  {submitting ? 'Saving...' : editingCategory ? 'Update' : 'Create'}
+                  {submitting ? 'Saving...' : editingCategory ? 'Save Changes' : 'Create Category'}
                 </button>
               </div>
             </form>
@@ -277,38 +310,37 @@ const AdminCategories = () => {
 
       {/* DELETE CONFIRMATION DIALOG */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-brand-error flex items-center justify-center mx-auto">
-              <AlertCircle className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white rounded-modal border border-brand-border max-w-sm w-full p-5 shadow-dropdown space-y-4">
+            <div className="w-10 h-10 rounded-full bg-red-50 text-brand-error flex items-center justify-center mx-auto border border-red-100">
+              <AlertCircle className="w-5 h-5" />
             </div>
 
             <div className="text-center space-y-1">
-              <h4 className="text-base font-bold text-brand-dark">Delete Category</h4>
+              <h4 className="text-sm font-bold text-brand-dark">Delete Category</h4>
               <p className="text-xs text-brand-muted">
-                Categories with existing products cannot be deleted. If products belong to this category, the action will be safely rejected.
+                Categories with existing products cannot be deleted. If products are linked to this category, the deletion will be rejected to preserve catalog integrity.
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center gap-2 pt-2 border-t border-brand-border">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                className="btn-secondary text-xs py-2 px-3.5"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2 bg-brand-error hover:bg-red-700 text-white rounded-xl text-xs font-semibold"
+                className="btn-danger text-xs py-2 px-3.5"
               >
-                Confirm Delete
+                Delete Category
               </button>
             </div>
           </div>
         </div>
       )}
-
-    </div>
+    </AdminLayout>
   );
 };
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
-import { CheckCircle2, FileText, ShoppingBag, ArrowRight, ShieldCheck, Mail } from 'lucide-react';
+import { CheckCircle2, FileText, ShoppingBag, ArrowRight } from 'lucide-react';
 import api from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 const OrderSuccess = () => {
   const { orderId } = useParams();
@@ -26,71 +26,63 @@ const OrderSuccess = () => {
   }
 
   const orderNumber = order?.order_number || orderId || 'ORD-CLICKCART';
+  const totalAmount = order?.total_amount ? parseFloat(order.total_amount).toLocaleString('en-IN') : '0';
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center space-y-8">
+    <div className="max-w-xl mx-auto px-4 sm:px-6 py-16 text-center space-y-6">
       
-      {/* Branded Success Card */}
-      <div className="bg-white border border-brand-border rounded-3xl p-8 sm:p-12 shadow-md space-y-6">
+      {/* Clean Confirmation Card */}
+      <div className="bg-white border border-brand-border rounded-card p-6 sm:p-10 shadow-subtle space-y-5">
         
-        {/* Animated Checkmark Circle */}
-        <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center mx-auto text-emerald-600 shadow-sm animate-bounce" style={{ animationIterationCount: 2 }}>
-          <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+        {/* Subtle Checkmark Circle */}
+        <div className="w-12 h-12 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto text-brand-success">
+          <CheckCircle2 className="w-6 h-6" />
         </div>
 
-        <div className="space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-brand-orange">
-            Confirmed & Recorded in MySQL
-          </span>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-brand-dark tracking-tight">
-            Order placed successfully!
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-brand-dark tracking-tight">
+            Order Confirmed
           </h1>
-          <p className="text-base text-brand-muted max-w-md mx-auto">
-            Thank you for shopping with <strong className="text-brand-dark font-semibold">ClickCart</strong>. Your order is being prepared for fulfillment.
+          <p className="text-xs text-brand-muted">
+            Thank you for shopping with ClickCart.
           </p>
         </div>
 
-        {/* Order Identifier Pill */}
-        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-mono font-bold text-brand-dark">
-          <span>Order ID:</span>
-          <span className="text-brand-indigo">{orderNumber}</span>
+        {/* Order Details Pill */}
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-btn text-xs font-mono text-brand-dark flex items-center justify-between">
+          <span className="text-gray-500 font-sans">Order ID:</span>
+          <span className="font-bold text-brand-indigo">{orderNumber}</span>
         </div>
 
-        {order?.customer_name && (
-          <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs sm:text-sm text-indigo-950 text-left max-w-md mx-auto space-y-1">
-            <p><strong>Billed To:</strong> {order.customer_name}</p>
-            {order.email && <p className="text-brand-muted">Confirmation sent to: {order.email}</p>}
-            {order.total_amount && (
-              <p className="pt-1 font-semibold text-brand-dark">
-                Total Paid / Due: ₹{parseFloat(order.total_amount).toLocaleString('en-IN')}
-              </p>
-            )}
+        {order?.total_amount && (
+          <div className="flex justify-between text-xs py-2 border-b border-gray-100">
+            <span className="text-gray-500">Total:</span>
+            <span className="font-bold text-brand-dark">₹{totalAmount}</span>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
           <Link
             to={`/invoice/${orderNumber}`}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-semibold text-white bg-brand-indigo hover:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-indigo/50 active:scale-98"
+            className="w-full sm:w-auto btn-primary text-xs py-2.5"
           >
-            <FileText className="w-4 h-4" />
-            <span>View & Print Invoice</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>Download Invoice</span>
           </Link>
 
           <Link
             to="/orders"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-semibold text-brand-indigo bg-white border border-indigo-200 hover:bg-indigo-50/50 shadow-xs transition-all"
+            className="w-full sm:w-auto btn-secondary text-xs py-2.5"
           >
-            <span>My Orders History</span>
+            <span>View Order History</span>
           </Link>
 
           <Link
             to="/products"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 transition-all"
+            className="w-full sm:w-auto text-xs text-gray-500 hover:text-brand-dark py-2 px-3 transition-colors"
           >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Continue Shopping</span>
+            Continue shopping
           </Link>
         </div>
 

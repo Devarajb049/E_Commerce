@@ -20,12 +20,16 @@ const CartItem = ({ item }) => {
   const isMaxStock = item.quantity >= item.stock_quantity;
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white border border-brand-border rounded-2xl gap-4 hover:border-gray-300 transition-colors">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white border border-brand-border rounded-card gap-4 hover:border-gray-300 transition-colors">
+      
       {/* Product Image and Details */}
-      <div className="flex items-center gap-4 flex-1">
-        <Link to={`/products/${item.product_id}`} className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-gray-50 flex-shrink-0 overflow-hidden border border-gray-100 flex items-center justify-center">
+      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+        <Link 
+          to={`/products/${item.product_id}`} 
+          className="w-16 h-16 rounded-btn bg-gray-50 flex-shrink-0 overflow-hidden border border-gray-100 flex items-center justify-center"
+        >
           {imgError ? (
-            <img src="/logo-icon.svg" alt="ClickCart fallback" className="w-8 h-8 opacity-40" />
+            <img src="/logo-icon.svg" alt="ClickCart" className="w-6 h-6 opacity-40" />
           ) : (
             <img
               src={item.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&q=80'}
@@ -37,61 +41,58 @@ const CartItem = ({ item }) => {
         </Link>
 
         <div className="flex-1 min-w-0">
-          <span className="text-[10px] font-semibold text-brand-indigo uppercase tracking-wider">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block">
             {item.category_name}
           </span>
           <Link to={`/products/${item.product_id}`} className="block hover:text-brand-indigo transition-colors">
-            <h4 className="font-semibold text-sm sm:text-base text-brand-dark truncate">
+            <h4 className="font-semibold text-sm text-brand-dark truncate">
               {item.product_name}
             </h4>
           </Link>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs sm:text-sm font-medium text-gray-500">
-              {formattedPrice} each
-            </span>
-            <span className="text-xs text-gray-300">•</span>
-            <span className="text-xs text-gray-400">
-              Stock: {item.stock_quantity}
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+            <span>{formattedPrice} each</span>
+            <span>•</span>
+            <span className={item.stock_quantity <= 5 ? 'text-brand-warning font-medium' : ''}>
+              {item.stock_quantity} available
             </span>
           </div>
         </div>
       </div>
 
-      {/* Quantity & Subtotal Controls */}
-      <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+      {/* Steppers & Line Total */}
+      <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100">
         
-        {/* Stepper */}
-        <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50 p-0.5 shadow-xs">
+        {/* Quantity Controls */}
+        <div className="flex items-center border border-brand-border rounded-btn bg-gray-50">
           <button
             onClick={() => decreaseQuantity(item.product_id)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white text-gray-600 hover:text-brand-indigo hover:bg-gray-100 transition-colors shadow-xs"
+            className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-brand-dark hover:bg-white rounded-l-btn transition-colors"
             aria-label="Decrease quantity"
           >
-            <Minus className="w-3.5 h-3.5" />
+            <Minus className="w-3 h-3" />
           </button>
 
-          <span className="w-9 text-center text-xs sm:text-sm font-bold text-brand-dark">
+          <span className="w-8 text-center text-xs font-bold text-brand-dark">
             {item.quantity}
           </span>
 
           <button
             onClick={() => increaseQuantity(item.product_id)}
             disabled={isMaxStock}
-            className={`w-7 h-7 flex items-center justify-center rounded-lg bg-white shadow-xs transition-colors ${
+            className={`w-7 h-7 flex items-center justify-center text-gray-600 rounded-r-btn transition-colors ${
               isMaxStock
                 ? 'text-gray-300 cursor-not-allowed'
-                : 'text-gray-600 hover:text-brand-indigo hover:bg-gray-100'
+                : 'hover:text-brand-dark hover:bg-white'
             }`}
             aria-label="Increase quantity"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Item Total */}
-        <div className="text-right min-w-[80px]">
-          <span className="block text-xs text-gray-400">Subtotal</span>
-          <span className="text-sm sm:text-base font-bold text-brand-dark">
+        {/* Line Subtotal */}
+        <div className="text-right min-w-[75px]">
+          <span className="text-sm font-bold text-brand-dark block">
             {lineSubtotal}
           </span>
         </div>
@@ -99,13 +100,14 @@ const CartItem = ({ item }) => {
         {/* Remove Button */}
         <button
           onClick={() => removeFromCart(item.product_id)}
-          className="p-2 text-gray-400 hover:text-brand-error hover:bg-red-50 rounded-xl transition-colors"
-          title="Remove from cart"
+          className="p-1.5 text-gray-400 hover:text-brand-error hover:bg-red-50 rounded-btn transition-colors"
+          title="Remove item"
           aria-label={`Remove ${item.product_name} from cart`}
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
+
     </div>
   );
 };
