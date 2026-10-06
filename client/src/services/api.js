@@ -10,6 +10,18 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
+// Request interceptor to attach JWT authentication token
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('clickcart_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Response interceptor for consistent error messaging
 apiClient.interceptors.response.use(
   (response) => response.data,
@@ -31,6 +43,12 @@ apiClient.interceptors.response.use(
 );
 
 export const api = {
+  // Authentication
+  login: (credentials) => apiClient.post('/auth/login', credentials),
+  getMe: () => apiClient.get('/auth/me'),
+  register: (userData) => apiClient.post('/auth/register', userData),
+  logout: () => apiClient.post('/auth/logout'),
+
   // Categories
   getCategories: () => apiClient.get('/categories'),
   getCategory: (id) => apiClient.get(`/categories/${id}`),

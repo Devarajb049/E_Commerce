@@ -83,3 +83,12 @@ INSERT INTO Products (product_id, category_id, product_name, description, price,
 (40, 8, 'Hydrating Hyaluronic Acid & Vitamin C Facial Serum', 'Intense moisture booster formulated with 2% multi-molecular hyaluronic acid and green tea antioxidants.', 899.00, 33, 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800&q=80'),
 (41, 8, 'Botanical Nourishing Hair Repair Treatment Oil', 'Cold-pressed Moroccan argan oil and jojoba blend to tame frizz and restore healthy luminous shine.', 749.00, 27, 'https://images.unsplash.com/photo-1608248597359-00f074d28362?w=800&q=80'),
 (42, 8, 'Mineral Sunscreen SPF 50+ Broad Spectrum (100ml)', 'Lightweight non-greasy matte finish sunscreen with zinc oxide and zero white cast protection.', 699.00, 40, 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=800&q=80');
+
+-- 3. Insert Demo Users (Idempotent seed with hashed passwords)
+INSERT INTO Users (name, email, password_hash, role) VALUES
+('ClickCart Admin', 'admin@clickcart.com', '$2b$10$ZuzuuZZOvMdfL7a8nOvInOeJ4h6EfbGm/jywqzixhPtyQ8QyxWkCq', 'admin'),
+('Demo Customer', 'customer@clickcart.com', '$2b$10$hhhz/FbP.GVAx4KS1UfNlOSoWDtq/upWiowfVVutBY2g3aDaXjU3y', 'customer')
+ON DUPLICATE KEY UPDATE 
+    name = VALUES(name),
+    password_hash = VALUES(password_hash),
+    role = VALUES(role);

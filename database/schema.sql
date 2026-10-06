@@ -92,3 +92,17 @@ CREATE TABLE Order_Items (
 -- Indexes for order item lookups and aggregation
 CREATE INDEX idx_order_items_order_id ON Order_Items(order_id);
 CREATE INDEX idx_order_items_product_id ON Order_Items(product_id);
+
+-- 5. Users Table (Authentication & Role-Based Access Control)
+CREATE TABLE IF NOT EXISTS Users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'customer') NOT NULL DEFAULT 'customer',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_users_email ON Users(email);
+CREATE INDEX idx_users_role ON Users(role);

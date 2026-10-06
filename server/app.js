@@ -7,6 +7,13 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const authRoutes = require('./routes/authRoutes');
+const { seedUsers } = require('./seed');
+
+// Auto-seed demo admin and customer accounts in MySQL
+seedUsers().catch((err) => {
+  console.warn('⚠️ Non-blocking user auto-seed notice:', err.message);
+});
 
 const app = express();
 
@@ -77,6 +84,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 Handler for undefined routes
 app.use(notFoundHandler);

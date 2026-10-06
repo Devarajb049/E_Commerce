@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, X, Shield, User } from 'lucide-react';
+import { ShoppingCart, Search, Menu, X, Shield, User, LogIn, LogOut } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [navSearchQuery, setNavSearchQuery] = useState('');
   const { totalItemsCount } = useCart();
+  const { isAuthenticated, isAdmin, user, logout } = useAuth();
   const navigate = useNavigate();
 
   const navLinks = [
@@ -42,7 +44,7 @@ const Navbar = () => {
               <img 
                 src="/logo-icon.svg" 
                 alt="ClickCart" 
-                className="w-7 h-7 flex-shrink-0"
+                className="w-7 h-7 flex-shrink-0" 
               />
               <span className="text-xl font-bold tracking-tight text-brand-dark">
                 Click<span className="text-brand-indigo">Cart</span>
@@ -70,35 +72,36 @@ const Navbar = () => {
             </nav>
           </div>
 
-          {/* RIGHT: SEARCH, CART, ADMIN */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* RIGHT: SEARCH, CART & AUTH CONTROLS */}
+          <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Quick Search Toggle / Input */}
+            {/* Quick Search Toggle / Form */}
             <div className="relative">
               {searchOpen ? (
-                <form onSubmit={handleNavSearch} className="flex items-center animate-fadeIn">
-                  <input
-                    type="text"
-                    value={navSearchQuery}
-                    onChange={(e) => setNavSearchQuery(e.target.value)}
-                    placeholder="Search products..."
-                    autoFocus
-                    className="w-48 sm:w-64 pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-brand-border rounded-input focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-indigo/20 focus:border-brand-indigo transition-all"
-                  />
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 pointer-events-none" />
-                  <button
-                    type="button"
-                    onClick={() => setSearchOpen(false)}
-                    className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                <form onSubmit={handleNavSearch} className="flex items-center">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={navSearchQuery}
+                      onChange={(e) => setNavSearchQuery(e.target.value)}
+                      placeholder="Search store..."
+                      autoFocus
+                      className="w-48 sm:w-64 pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-brand-border rounded-input focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-indigo/20 focus:border-brand-indigo transition-all shadow-subtle"
+                    />
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => setSearchOpen(false)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <button
                   onClick={() => setSearchOpen(true)}
                   className="p-2 text-gray-500 hover:text-brand-dark hover:bg-gray-100 rounded-btn transition-colors"
-                  title="Search"
                   aria-label="Open search input"
                 >
                   <Search className="w-4 h-4" />
@@ -123,15 +126,42 @@ const Navbar = () => {
               )}
             </Link>
 
-            {/* Admin Portal Link */}
-            <Link
-              to="/admin"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-brand-indigo hover:bg-indigo-50/50 border border-brand-border rounded-btn transition-colors"
-              title="Admin Control Center"
-            >
-              <Shield className="w-3.5 h-3.5 text-gray-500" />
-              <span>Admin</span>
-            </Link>
+            {/* Authentication Area */}
+            {isAuthenticated ? (
+              <div className="hidden sm:flex items-center gap-2">
+                {isAdmin ? (
+                  <Link
+                    to="/admin/dashboard"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand-indigo bg-indigo-50 border border-indigo-200 rounded-btn hover:bg-indigo-100 transition-colors"
+                    title="Go to Admin Dashboard"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-brand-indigo" />
+                    <span>Admin</span>
+                  </Link>
+                ) : (
+                  <span className="text-xs text-gray-600 font-medium px-2 py-1 bg-gray-50 rounded-btn border border-gray-100">
+                    {user?.name?.split(' ')[0] || 'Customer'}
+                  </span>
+                )}
+
+                <button
+                  onClick={logout}
+                  className="p-1.5 text-gray-400 hover:text-brand-error hover:bg-red-50 rounded-btn transition-colors"
+                  title="Sign Out"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-brand-indigo hover:bg-gray-50 border border-brand-border rounded-btn transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5 text-gray-500" />
+                <span>Sign In</span>
+              </Link>
+            )}
 
             {/* Mobile Menu Hamburger */}
             <button
@@ -171,15 +201,40 @@ const Navbar = () => {
               </Link>
             ))}
 
-            <div className="pt-2 border-t border-gray-100">
-              <Link
-                to="/admin"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-indigo bg-indigo-50/50 hover:bg-indigo-100/50 rounded-btn transition-colors"
-              >
-                <Shield className="w-4 h-4" />
-                <span>Admin Dashboard</span>
-              </Link>
+            <div className="pt-2 border-t border-gray-100 space-y-1">
+              {isAuthenticated ? (
+                <>
+                  {isAdmin && (
+                    <Link
+                      to="/admin/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-indigo bg-indigo-50/70 rounded-btn"
+                    >
+                      <Shield className="w-4 h-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  )}
+                  <button
+                    onClick={() => {
+                      logout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-error hover:bg-red-50 rounded-btn text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out ({user?.email})</span>
+                  </button>
+                </>
+              ) : (
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-brand-indigo bg-indigo-50/60 rounded-btn"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </Link>
+              )}
             </div>
           </div>
         )}

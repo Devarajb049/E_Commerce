@@ -15,6 +15,18 @@
 - **Academic Context:** Full-Stack Development (FSD) Project
 - **GitHub Repository:** [https://github.com/Devarajb049/E_Commerce.git](https://github.com/Devarajb049/E_Commerce.git)
 
+---
+
+## Demo Admin Login
+
+For testing, evaluation, and demonstration purposes, use the dedicated one-tap demo administrator account:
+
+- **Email:** `admin@clickcart.com`
+- **Password:** `ClickCart@123`
+- **Role:** Administrator
+
+> **Note:** The demo admin account is automatically seeded into MySQL on server initialization with bcrypt password hashing (`npm run seed`). Reviewers can click the **"⚡ Continue as Demo Admin"** one-tap button directly on the `/login` page to authenticate instantly via the real JWT authentication API without manual typing.
+
 
 ## 1. Brand Identity & Visual System
 

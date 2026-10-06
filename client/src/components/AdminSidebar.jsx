@@ -10,14 +10,19 @@ import {
   Menu,
   X,
   ExternalLink,
-  Shield
+  Shield,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const AdminSidebar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const links = [
-    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Products', path: '/admin/products', icon: Package },
     { name: 'Categories', path: '/admin/categories', icon: FolderTree },
     { name: 'Orders', path: '/admin/orders', icon: ShoppingBag },
@@ -25,6 +30,11 @@ const AdminSidebar = () => {
   ];
 
   const closeMobile = () => setMobileOpen(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <>
@@ -88,7 +98,7 @@ const AdminSidebar = () => {
                 <NavLink
                   key={link.name}
                   to={link.path}
-                  end={link.path === '/admin'}
+                  end={link.path === '/admin' || link.path === '/admin/dashboard'}
                   onClick={closeMobile}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-btn transition-colors ${
@@ -106,8 +116,28 @@ const AdminSidebar = () => {
           </nav>
         </div>
 
-        {/* Sidebar Footer Link */}
-        <div className="p-4 border-t border-brand-border space-y-2">
+        {/* Sidebar Footer User Info & Actions */}
+        <div className="p-4 border-t border-brand-border space-y-2.5">
+          {/* Current Admin User Badge */}
+          <div className="p-2.5 bg-gray-50 rounded-btn border border-brand-border flex items-center justify-between">
+            <div className="truncate pr-2">
+              <span className="block text-xs font-bold text-brand-dark truncate">
+                {user?.name || 'ClickCart Admin'}
+              </span>
+              <span className="block text-[10px] text-brand-muted truncate font-mono">
+                {user?.email || 'admin@clickcart.com'}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-gray-400 hover:text-brand-error hover:bg-red-50 rounded-btn transition-colors flex-shrink-0"
+              title="Sign Out"
+              aria-label="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <Link
             to="/"
             className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-600 hover:text-brand-indigo hover:bg-gray-50 rounded-btn transition-colors"

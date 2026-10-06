@@ -2,11 +2,13 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext';
 import { CartProvider } from './context/CartContext';
+import { AuthProvider } from './context/AuthContext';
 
 // Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import EmptyState from './components/EmptyState';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import Home from './pages/Home';
@@ -17,6 +19,7 @@ import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 import Invoice from './pages/Invoice';
 import Orders from './pages/Orders';
+import Login from './pages/Login';
 
 // Admin Pages
 import AdminDashboard from './pages/AdminDashboard';
@@ -56,13 +59,57 @@ function AppContent() {
           <Route path="/order-success/:orderId" element={<OrderSuccess />} />
           <Route path="/invoice/:id" element={<Invoice />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/login" element={<Login />} />
 
-          {/* Admin Control Center Routes */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/products" element={<AdminProducts />} />
-          <Route path="/admin/categories" element={<AdminCategories />} />
-          <Route path="/admin/orders" element={<AdminOrders />} />
-          <Route path="/admin/reports" element={<AdminReports />} />
+          {/* Protected Admin Control Center Routes */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/products"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminProducts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/categories"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminCategories />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/orders"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminReports />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Fallback */}
           <Route path="/404" element={<NotFoundPage />} />
@@ -77,11 +124,13 @@ function AppContent() {
 function App() {
   return (
     <ToastProvider>
-      <CartProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </CartProvider>
+      <AuthProvider>
+        <CartProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </CartProvider>
+      </AuthProvider>
     </ToastProvider>
   );
 }
