@@ -1,18 +1,37 @@
 import React from 'react';
+import { MorphingInfinity } from './MorphingInfinity';
 
-export const LoadingSpinner = ({ message = 'Loading...', fullScreen = false }) => {
+export { MorphingInfinity };
+
+/**
+ * ClickCart Brand Loader with Morphing Infinity Animation
+ */
+export const LoadingSpinner = ({
+  message = 'Loading...',
+  fullScreen = false,
+  className = '',
+  size = 'md',
+}) => {
+  const sizeClasses = {
+    sm: 'w-6 h-6',
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
+  }[size] || 'w-10 h-10';
+
   const content = (
-    <div className="flex flex-col items-center justify-center p-8 space-y-3">
-      <div className="w-7 h-7 border-2 border-indigo-100 border-t-brand-indigo rounded-full animate-spin" />
-      <p className="text-xs font-medium text-brand-muted tracking-tight">
-        {message}
-      </p>
+    <div className={`flex flex-col items-center justify-center p-8 space-y-4 ${className}`}>
+      <MorphingInfinity className={`${sizeClasses} text-[#4F46E5] drop-shadow-xs`} />
+      {message && (
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.1em] select-none">
+          {message}
+        </p>
+      )}
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="min-h-[55vh] flex items-center justify-center">
         {content}
       </div>
     );
