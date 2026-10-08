@@ -20,6 +20,8 @@ import OrderSuccess from './pages/OrderSuccess';
 import Invoice from './pages/Invoice';
 import Orders from './pages/Orders';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import Unauthorized from './pages/Unauthorized';
 
 // Admin Pages
 import AdminDashboard from './pages/AdminDashboard';
@@ -60,6 +62,9 @@ function AppContent() {
           <Route path="/invoice/:id" element={<Invoice />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/403" element={<Unauthorized />} />
 
           {/* Protected Admin Control Center Routes */}
           <Route

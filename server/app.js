@@ -8,6 +8,8 @@ const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
+const addressRoutes = require('./routes/addressRoutes');
+const returnRoutes = require('./routes/returnRoutes');
 const { seedUsers } = require('./seed');
 
 // Auto-seed demo admin and customer accounts in MySQL
@@ -19,7 +21,7 @@ const app = express();
 
 // Security and Parsing Middlewares
 app.use(cors({
-  origin: '*',
+  origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -49,18 +51,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint verifying MySQL DB connection
+// Health check endpoint verifying DB connection
 app.get('/api/health', async (req, res) => {
   try {
     const startTime = Date.now();
     const [result] = await db.query('SELECT 1 + 1 AS result');
     const dbLatency = Date.now() - startTime;
+    const isConnected = Boolean(result && (result[0]?.result === 2 || result[0]?.['1 + 1'] === 2 || result.length > 0));
 
     res.status(200).json({
       success: true,
       status: 'healthy',
       database: {
-        connected: result && result[0].result === 2,
+        connected: isConnected,
+        engine: db.isSqlite ? 'sqlite-embedded' : 'mysql',
         latency_ms: dbLatency,
         name: process.env.DB_NAME || 'ecommerce_db'
       },
@@ -85,6 +89,8 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/addresses', addressRoutes);
+app.use('/api/returns', returnRoutes);
 
 // 404 Handler for undefined routes
 app.use(notFoundHandler);

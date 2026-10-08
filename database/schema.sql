@@ -50,6 +50,7 @@ CREATE INDEX idx_products_price ON Products(price);
 CREATE TABLE Orders (
     order_id INT AUTO_INCREMENT PRIMARY KEY,
     order_number VARCHAR(30) NOT NULL UNIQUE,
+    user_id INT NULL,
     customer_name VARCHAR(150) NOT NULL,
     email VARCHAR(150) NOT NULL,
     phone VARCHAR(25) NOT NULL,
@@ -60,14 +61,63 @@ CREATE TABLE Orders (
     subtotal DECIMAL(10, 2) NOT NULL,
     tax DECIMAL(10, 2) NOT NULL,
     total_amount DECIMAL(10, 2) NOT NULL,
-    order_status ENUM('PLACED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED') NOT NULL DEFAULT 'PLACED',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    order_status ENUM('PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURN_REQUESTED', 'RETURNED', 'REFUNDED') NOT NULL DEFAULT 'PLACED',
+    delivery_method VARCHAR(50) DEFAULT 'STANDARD',
+    shipping_fee DECIMAL(10, 2) DEFAULT 0.00,
+    payment_method VARCHAR(50) DEFAULT 'COD',
+    payment_status ENUM('PENDING', 'PROCESSING', 'PAID', 'FAILED', 'REFUNDED') DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 -- Indexes for order analytics and filtering
 CREATE INDEX idx_orders_status ON Orders(order_status);
 CREATE INDEX idx_orders_created_at ON Orders(created_at);
 CREATE INDEX idx_orders_email ON Orders(email);
+CREATE INDEX idx_orders_user_id ON Orders(user_id);
+
+-- Order Status History Table
+CREATE TABLE IF NOT EXISTS order_status_history (
+    history_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    note TEXT,
+    changed_by VARCHAR(100) DEFAULT 'SYSTEM',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_history_order FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Customer Saved Addresses Table
+CREATE TABLE IF NOT EXISTS user_addresses (
+    address_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    phone VARCHAR(25) NOT NULL,
+    address_line TEXT NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    postal_code VARCHAR(20) NOT NULL,
+    country VARCHAR(100) DEFAULT 'India',
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_address_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Returns & Refunds Table
+CREATE TABLE IF NOT EXISTS order_returns (
+    return_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    user_id INT NOT NULL,
+    product_id INT NULL,
+    reason TEXT NOT NULL,
+    status ENUM('REQUESTED', 'APPROVED', 'REJECTED', 'RECEIVED', 'COMPLETED', 'CANCELLED') DEFAULT 'REQUESTED',
+    refund_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    admin_notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_return_order FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE,
+    CONSTRAINT fk_return_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
 
 -- 4. Order_Items Table
 CREATE TABLE Order_Items (

@@ -1,126 +1,281 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Truck, ShieldCheck, RotateCcw, Headphones, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowUp, Linkedin, Instagram, Github, X as CloseIcon } from 'lucide-react';
 
-const Footer = () => {
+/**
+ * Modern X (formerly Twitter) official SVG brand icon
+ */
+const XBrandIcon = ({ className = "w-5 h-5 sm:w-6 sm:h-6" }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
+/**
+ * ClickCart Premium Grid-Based Minimal Footer CTA
+ * 
+ * Specifications:
+ * - Subtle technical grid background (56px spacing, #F9FAFB bg, #E5E7EB grid)
+ * - Oversized centered headline ("Let's Shop Smarter") with #111827 / #4F46E5 typography contrast
+ * - 4 circular social buttons with hover elevation & indigo state
+ * - 2 pill-shaped legal buttons linking to accessible modal policies
+ * - Huge architectural background wordmark ("CLICKCART") with clamp(120px, 20vw, 400px)
+ * - Centered uppercase copyright with dynamic year
+ * - Floating Back-To-Top button appearing on scroll with smooth/reduced-motion handling
+ */
+const ClickCartFooter = () => {
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [policyModal, setPolicyModal] = useState(null); // 'privacy' | 'terms' | null
+
+  // Scroll detection for floating back-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 280);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Handle ESC key to dismiss modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setPolicyModal(null);
+      }
+    };
+    if (policyModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [policyModal]);
+
+  // Smooth scroll to top honoring prefers-reduced-motion
+  const scrollToTop = () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  };
+
+  // 4 Official brand social channels
+  const socialLinks = [
+    {
+      name: 'LinkedIn',
+      icon: Linkedin,
+      href: 'https://linkedin.com',
+      label: 'ClickCart LinkedIn',
+      isCustomSvg: false,
+    },
+    {
+      name: 'Instagram',
+      icon: Instagram,
+      href: 'https://instagram.com',
+      label: 'ClickCart Instagram',
+      isCustomSvg: false,
+    },
+    {
+      name: 'GitHub',
+      icon: Github,
+      href: 'https://github.com',
+      label: 'ClickCart GitHub',
+      isCustomSvg: false,
+    },
+    {
+      name: 'X',
+      icon: XBrandIcon,
+      href: 'https://x.com',
+      label: 'ClickCart X (Twitter)',
+      isCustomSvg: true,
+    },
+  ];
+
+  const currentYear = new Date().getFullYear();
+
   return (
-    <footer className="bg-white border-t border-brand-border mt-auto">
-      {/* Retail Guarantees */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 border-b border-gray-100">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-btn bg-gray-50 border border-gray-100 flex items-center justify-center text-brand-dark flex-shrink-0">
-              <Truck className="w-4 h-4 text-brand-indigo" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-brand-dark">Fast Dispatch</p>
-              <p className="text-[11px] text-brand-muted">Orders shipped in 24 hours</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-btn bg-gray-50 border border-gray-100 flex items-center justify-center text-brand-dark flex-shrink-0">
-              <ShieldCheck className="w-4 h-4 text-brand-indigo" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-brand-dark">100% Genuine</p>
-              <p className="text-[11px] text-brand-muted">Authentic retail inventory</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-btn bg-gray-50 border border-gray-100 flex items-center justify-center text-brand-dark flex-shrink-0">
-              <RotateCcw className="w-4 h-4 text-brand-indigo" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-brand-dark">Easy Returns</p>
-              <p className="text-[11px] text-brand-muted">7-day replacement window</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-btn bg-gray-50 border border-gray-100 flex items-center justify-center text-brand-dark flex-shrink-0">
-              <Headphones className="w-4 h-4 text-brand-indigo" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-brand-dark">Dedicated Support</p>
-              <p className="text-[11px] text-brand-muted">Help for every order</p>
-            </div>
-          </div>
+    <>
+      <footer
+        className="relative w-full min-h-[500px] lg:min-h-[600px] bg-[#F9FAFB] border-t border-[#E5E7EB] overflow-hidden flex flex-col justify-between items-center text-center select-none pt-20 pb-12 sm:pt-28 sm:pb-16 px-4"
+        style={{
+          backgroundColor: '#F9FAFB',
+          backgroundImage: `
+            linear-gradient(to right, rgba(229, 231, 235, 0.75) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(229, 231, 235, 0.75) 1px, transparent 1px)
+          `,
+          backgroundSize: '56px 56px',
+        }}
+      >
+        {/* Layer 1: Oversized Background Wordmark (z-index: 1, aria-hidden) */}
+        <div
+          aria-hidden="true"
+          className="absolute left-1/2 -translate-x-1/2 bottom-3 sm:-bottom-4 lg:-bottom-8 pointer-events-none select-none text-[#E5E7EB] font-black tracking-tighter whitespace-nowrap z-[1] leading-none"
+          style={{
+            fontSize: 'clamp(120px, 20vw, 250px)',
+            opacity: 0.45,
+            lineHeight: 0.92,
+          }}
+        >
+          CLICKCART
         </div>
-      </div>
 
-      {/* Main Links & Team Info */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          
-          {/* Brand Info */}
-          <div className="md:col-span-4 space-y-2.5">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/logo-icon.svg" alt="ClickCart Logo" className="w-6 h-6" />
-              <span className="text-xl font-bold tracking-tight text-brand-dark">
-                Click<span className="text-brand-indigo">Cart</span>
-              </span>
-            </Link>
-            <p className="text-xs font-semibold text-brand-orange">Shop in a click.</p>
-            <p className="text-xs text-brand-muted leading-relaxed max-w-sm">
-              ClickCart is a modern e-commerce and order management system built with React, Node.js/Express, and MySQL.
+        {/* Layer 2: Main Footer Content (z-index: 2) */}
+        <div className="relative z-[2] w-full max-w-5xl mx-auto flex flex-col items-center justify-between flex-1">
+
+          {/* Section: Main Headline */}
+          <div className="mb-10 sm:mb-12">
+            <h2 className="text-4xl sm:text-6xl md:text-7xl lg:text-[84px] xl:text-[96px] font-extrabold tracking-[-0.04em] text-[#111827] leading-[0.98] select-none text-center">
+              Let&apos;s <span className="text-[#4F46E5]">Shop Smarter</span>
+            </h2>
+          </div>
+
+          {/* Section: Circular Social Icons */}
+          <nav aria-label="Social Media Links" className="mb-8 sm:mb-10">
+            <ul className="flex items-center justify-center gap-3 sm:gap-4 p-0 m-0 list-none">
+              {socialLinks.map((item) => {
+                const IconComponent = item.icon;
+                return (
+                  <li key={item.name}>
+                    <a
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={item.label}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white border border-[#E5E7EB] shadow-[0_1px_3px_0_rgba(0,0,0,0.05)] flex items-center justify-center text-[#111827] hover:text-[#4F46E5] hover:border-[#4F46E5] hover:-translate-y-[3px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40"
+                    >
+                      <IconComponent className="w-5 h-5 sm:w-6 sm:h-6 transition-colors duration-200" />
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          {/* Section: Pill-Shaped Legal Buttons */}
+          <nav aria-label="Legal Links" className="mb-20 sm:mb-28 lg:mb-32 w-full max-w-md mx-auto">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => setPolicyModal('privacy')}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-white border border-[#E5E7EB] text-[#374151] hover:text-[#4F46E5] hover:border-[#4F46E5] text-xs sm:text-sm font-semibold tracking-[0.08em] uppercase shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] hover:-translate-y-[2px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40 cursor-pointer"
+              >
+                Privacy Policy
+              </button>
+              <button
+                type="button"
+                onClick={() => setPolicyModal('terms')}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-white border border-[#E5E7EB] text-[#374151] hover:text-[#4F46E5] hover:border-[#4F46E5] text-xs sm:text-sm font-semibold tracking-[0.08em] uppercase shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] hover:-translate-y-[2px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40 cursor-pointer"
+              >
+                Terms of Service
+              </button>
+            </div>
+          </nav>
+
+          {/* Section: Centered Copyright */}
+          <div className="pt-4 pb-2 text-center">
+            <p className="text-xs sm:text-sm font-semibold text-[#64748B] tracking-[0.1em] uppercase">
+              &copy; {currentYear} CLICKCART. ALL RIGHTS RESERVED.
             </p>
           </div>
 
-          {/* Quick Links */}
-          <div className="md:col-span-2 space-y-2">
-            <p className="text-xs font-bold text-brand-dark uppercase tracking-wider">Quick Links</p>
-            <ul className="space-y-1.5 text-xs text-brand-muted">
-              <li><Link to="/" className="hover:text-brand-indigo transition-colors">Home</Link></li>
-              <li><Link to="/products" className="hover:text-brand-indigo transition-colors">Products</Link></li>
-              <li><Link to="/products?view=categories" className="hover:text-brand-indigo transition-colors">Categories</Link></li>
-              <li><Link to="/orders" className="hover:text-brand-indigo transition-colors">Orders</Link></li>
-              <li><Link to="/cart" className="hover:text-brand-indigo transition-colors">My Cart</Link></li>
-            </ul>
-          </div>
+        </div>
+      </footer>
 
-          {/* Customer Support */}
-          <div className="md:col-span-2 space-y-2">
-            <p className="text-xs font-bold text-brand-dark uppercase tracking-wider">Support</p>
-            <ul className="space-y-1.5 text-xs text-brand-muted">
-              <li><span className="hover:text-brand-indigo cursor-pointer">Help Center</span></li>
-              <li><span className="hover:text-brand-indigo cursor-pointer">Track Order</span></li>
-              <li><span className="hover:text-brand-indigo cursor-pointer">Shipping Policy</span></li>
-              <li><span className="hover:text-brand-indigo cursor-pointer">Returns & Refunds</span></li>
-              <li><span className="hover:text-brand-indigo cursor-pointer">Privacy Terms</span></li>
-            </ul>
-          </div>
+      {/* Floating Back-To-Top Circular Button (z-index: 40) */}
+      <button
+        type="button"
+        onClick={scrollToTop}
+        className={`fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-40 w-14 h-14 rounded-full bg-white border border-[#DDE3EC] shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.12)] flex items-center justify-center text-[#111827] hover:text-[#4F46E5] hover:border-[#4F46E5] hover:-translate-y-[3px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40 cursor-pointer ${showBackToTop ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
+          }`}
+        aria-label="Back to top"
+        title="Back to top"
+      >
+        <ArrowUp className="w-5 h-5 transition-transform duration-200" />
+      </button>
 
-          {/* Project Team */}
-          <div className="md:col-span-4 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-brand-indigo" />
-              <p className="text-xs font-bold text-brand-dark uppercase tracking-wider">
-                Project 10 — Development Team
+      {/* Legal Information Modal Dialog */}
+      {policyModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="legal-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setPolicyModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-[#E5E7EB] max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 id="legal-modal-title" className="text-lg font-bold text-[#111827]">
+                {policyModal === 'privacy' ? 'ClickCart Privacy Policy' : 'ClickCart Terms of Service'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPolicyModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40"
+                aria-label="Close modal"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed space-y-3">
+              <p className="font-semibold text-slate-800">
+                Effective Date: January 1, {currentYear}
               </p>
+
+              {policyModal === 'privacy' ? (
+                <>
+                  <p>
+                    ClickCart is committed to protecting your privacy. This policy explains how we handle your personal data when browsing our catalog and placing orders:
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1.5 text-slate-600">
+                    <li><strong>Order Information:</strong> We store contact details and shipping addresses solely to process, deliver, and track your orders.</li>
+                    <li><strong>Payment Security:</strong> ClickCart does not store credit card or banking secrets. All payments are encrypted via standard industry protocols.</li>
+                    <li><strong>Cart Persistence:</strong> We utilize client-side local storage to maintain your active cart across sessions.</li>
+                    <li><strong>Data Protection:</strong> Your personal data is never sold or rented to third-party advertising brokers.</li>
+                  </ul>
+                  <p>
+                    If you have questions regarding your stored profile data, contact our support team at <span className="font-semibold text-[#4F46E5]">support@clickcart.com</span>.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    By accessing ClickCart and completing purchases on our platform, you agree to the following terms and commercial conditions:
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1.5 text-slate-600">
+                    <li><strong>Order Placement:</strong> Orders are subject to product availability and database stock verification.</li>
+                    <li><strong>Pricing & Taxes:</strong> All product prices include applicable GST as itemized during checkout.</li>
+                    <li><strong>Cancellations:</strong> Orders may be cancelled by customers while in the PLACED status prior to dispatch.</li>
+                    <li><strong>Returns:</strong> Eligible items may be returned within 7 days of delivery for a replacement or full refund.</li>
+                  </ul>
+                  <p>
+                    ClickCart reserves the right to update these terms to reflect changes in regulatory standards and fulfillment workflows.
+                  </p>
+                </>
+              )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-1 text-xs text-brand-muted">
-              <div>• Patnam Jahnavi (24691A05J8)</div>
-              <div>• P. Chinnari Saranya (25695A0512)</div>
-              <div>• Shaik Daulamma Farzana (25695A0513)</div>
-              <div>• Pinninti Durga Prasad (25695A0515)</div>
-              <div>• Kempeli Ganesh (25695A0516)</div>
-              <div>• Erllamuthaka Ganga Maheswari (25695A0517)</div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPolicyModal(null)}
+                className="py-2 px-5 rounded-lg text-xs font-semibold bg-[#111827] text-white hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
-
-        {/* Bottom Bar */}
-        <div className="mt-8 pt-5 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-muted gap-3">
-          <p>© 2026 ClickCart. All rights reserved.</p>
-          <p className="text-gray-400">
-            React • Node.js / Express • MySQL 8+
-          </p>
-        </div>
-      </div>
-    </footer>
+      )}
+    </>
   );
 };
 
-export default Footer;
+export default ClickCartFooter;

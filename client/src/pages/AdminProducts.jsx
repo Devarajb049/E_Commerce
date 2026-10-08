@@ -313,7 +313,7 @@ const AdminProducts = () => {
       {/* ADD / EDIT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
-          <div className="bg-white rounded-modal max-w-lg w-full p-5 sm:p-6 shadow-dropdown border border-brand-border space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-modal max-w-lg w-full p-5 sm:p-6 shadow-dropdown border border-brand-border space-y-4 max-h-[90vh] overflow-y-auto animate-modal-enter">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <h3 className="text-base font-bold text-brand-dark">
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
@@ -436,7 +436,7 @@ const AdminProducts = () => {
       {/* DELETE CONFIRMATION DIALOG */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
-          <div className="bg-white rounded-modal max-w-sm w-full p-5 shadow-dropdown space-y-3">
+          <div className="bg-white rounded-modal max-w-sm w-full p-5 shadow-dropdown space-y-3 animate-modal-enter">
             <div className="w-10 h-10 rounded-full bg-red-50 text-brand-error flex items-center justify-center mx-auto">
               <AlertTriangle className="w-5 h-5" />
             </div>

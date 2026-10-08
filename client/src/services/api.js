@@ -66,8 +66,20 @@ export const api = {
   // Orders
   createOrder: (orderData) => apiClient.post('/orders', orderData),
   getOrders: (params = {}) => apiClient.get('/orders', { params }),
+  getMyOrders: () => apiClient.get('/orders/my-orders'),
   getOrder: (id) => apiClient.get(`/orders/${id}`),
   updateOrderStatus: (id, status) => apiClient.put(`/orders/${id}/status`, { status }),
+  cancelOrder: (id) => apiClient.put(`/orders/${id}/cancel`),
+
+  // Addresses
+  getAddresses: () => apiClient.get('/addresses'),
+  createAddress: (data) => apiClient.post('/addresses', data),
+  deleteAddress: (id) => apiClient.delete(`/addresses/${id}`),
+
+  // Returns & Refunds
+  getReturns: () => apiClient.get('/returns'),
+  requestReturn: (data) => apiClient.post('/returns', data),
+  updateReturnStatus: (id, data) => apiClient.put(`/returns/${id}/status`, data),
 
   // Reports
   getSummary: () => apiClient.get('/reports/summary'),

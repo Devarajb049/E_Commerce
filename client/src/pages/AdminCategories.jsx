@@ -240,7 +240,7 @@ const AdminCategories = () => {
       {/* ADD / EDIT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-modal border border-brand-border max-w-md w-full p-6 shadow-dropdown space-y-4">
+          <div className="bg-white rounded-modal border border-brand-border max-w-md w-full p-6 shadow-dropdown space-y-4 animate-modal-enter">
             <div className="flex items-center justify-between pb-3 border-b border-brand-border">
               <h3 className="text-base font-bold text-brand-dark">
                 {editingCategory ? 'Edit Category' : 'Add New Category'}
@@ -311,7 +311,7 @@ const AdminCategories = () => {
       {/* DELETE CONFIRMATION DIALOG */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-modal border border-brand-border max-w-sm w-full p-5 shadow-dropdown space-y-4">
+          <div className="bg-white rounded-modal border border-brand-border max-w-sm w-full p-5 shadow-dropdown space-y-4 animate-modal-enter">
             <div className="w-10 h-10 rounded-full bg-red-50 text-brand-error flex items-center justify-center mx-auto border border-red-100">
               <AlertCircle className="w-5 h-5" />
             </div>

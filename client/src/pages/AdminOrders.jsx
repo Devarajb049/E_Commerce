@@ -254,7 +254,7 @@ const AdminOrders = () => {
       {/* INSPECT ORDER DETAILS MODAL */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-modal border border-brand-border max-w-xl w-full p-6 shadow-dropdown space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-modal border border-brand-border max-w-xl w-full p-6 shadow-dropdown space-y-4 max-h-[90vh] overflow-y-auto animate-modal-enter">
             <div className="flex items-center justify-between pb-3 border-b border-brand-border">
               <div>
                 <span className="font-mono text-xs text-brand-indigo font-bold block">

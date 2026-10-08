@@ -5,10 +5,14 @@ server/node_modules/
 
 # Environment Variables & Secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 server/.env
-server/.env.local
+server/.env.*
+!server/.env.example
+client/.env
+client/.env.*
+!client/.env.example
 
 # Production Build Artifacts
 dist/

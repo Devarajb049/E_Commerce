@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Zap, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Zap, ShieldCheck, Mail, ArrowLeft, Loader2, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import FormInput from '../components/form/FormInput';
+import PasswordInput from '../components/form/PasswordInput';
+import AnimatedOrderButton from '../components/common/AnimatedOrderButton';
 
+/**
+ * ClickCart Production-Grade Login Experience
+ * Clean centered authentication card, floating accent line inputs, accessible password toggle,
+ * remember me, and one-tap demo credentials calling the real IAM authentication API.
+ */
 const Login = () => {
   const { login } = useAuth();
   const { success, error: toastError } = useToast();
@@ -12,7 +20,7 @@ const Login = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [customerDemoLoading, setCustomerDemoLoading] = useState(false);
@@ -24,7 +32,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (!email.trim() || !password) {
-      setErrorMessage('Please enter both your email address and password.');
+      setErrorMessage('Please enter your email address and password.');
       return;
     }
 
@@ -54,8 +62,8 @@ const Login = () => {
   };
 
   /**
-   * One-Tap Demo Admin Login
-   * Automatically submits admin@clickcart.com / ClickCart@123 via real authentication API
+   * One-Tap Demo Admin Login:
+   * Calls real /api/auth/login with admin@clickcart.com / ClickCart@123
    */
   const handleDemoAdminLogin = async () => {
     try {
@@ -72,7 +80,7 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Demo admin login error:', err);
-      const msg = err.message || 'Demo admin authentication failed. Please verify server connection.';
+      const msg = err.message || 'Demo admin authentication failed. Please check server status.';
       setErrorMessage(msg);
       toastError(msg);
     } finally {
@@ -81,7 +89,8 @@ const Login = () => {
   };
 
   /**
-   * One-Tap Demo Customer Login for testing role restrictions
+   * One-Tap Demo Customer Login:
+   * Calls real /api/auth/login with customer@clickcart.com / Customer@123
    */
   const handleDemoCustomerLogin = async () => {
     try {
@@ -98,7 +107,7 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Demo customer login error:', err);
-      const msg = err.message || 'Demo customer authentication failed.';
+      const msg = err.message || 'Demo customer authentication failed. Please check server status.';
       setErrorMessage(msg);
       toastError(msg);
     } finally {
@@ -107,179 +116,134 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="min-h-[80vh] flex items-center justify-center py-10 px-4 sm:px-6 lg:px-8 page-transition">
+      <div className="max-w-md w-full bg-white border border-brand-border rounded-2xl p-6 sm:p-8 shadow-subtle space-y-6">
         
         {/* Brand Header */}
-        <div className="text-center">
-          <Link to="/" className="inline-flex items-center gap-2.5 mb-3 group">
-            <img 
-              src="/logo-icon.svg" 
-              alt="ClickCart" 
-              className="w-9 h-9 transition-transform group-hover:scale-105" 
-            />
-            <span className="text-2xl font-bold tracking-tight text-brand-dark">
-              Click<span className="text-brand-indigo">Cart</span>
+        <div className="text-center space-y-1.5">
+          <Link to="/" className="inline-flex items-center gap-2 mb-2">
+            <img src="/logo-icon.svg" alt="ClickCart Logo" className="w-8 h-8" />
+            <span className="text-xl font-bold tracking-tight text-brand-dark">
+              Click<span className="text-brand-primary">Cart</span>
             </span>
           </Link>
-
-          <h1 className="text-xl sm:text-2xl font-bold text-brand-dark tracking-tight">
-            Sign in to ClickCart
+          <h1 className="text-xl font-bold text-brand-dark">
+            Sign In to ClickCart
           </h1>
-          <p className="text-xs text-brand-muted mt-1">
-            Shop in a click • Access your orders & management dashboard
+          <p className="text-xs text-brand-muted">
+            Access your orders, saved addresses, and profile.
           </p>
         </div>
 
-        {/* Login Surface Card */}
-        <div className="mt-6 bg-white py-8 px-5 sm:px-10 border border-brand-border rounded-card shadow-subtle space-y-6">
-          
-          {/* Error Banner */}
-          {errorMessage && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-btn flex items-start gap-2.5 text-brand-error text-xs">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+        {/* Server / Validation Error Notice */}
+        {errorMessage && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium animate-pop-in">
+            {errorMessage}
+          </div>
+        )}
 
-          {/* Standard Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-brand-dark mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@clickcart.com"
-                  autoComplete="email"
-                  required
-                  disabled={loading || demoLoading || customerDemoLoading}
-                  className="form-input text-xs pl-9"
-                />
-              </div>
-            </div>
+        {/* Credentials Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <FormInput
+            id="email"
+            name="email"
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+            required
+            autoComplete="email"
+            icon={Mail}
+          />
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-brand-dark">
-                  Password
-                </label>
-                <span className="text-[11px] text-brand-muted">
-                  Case sensitive
-                </span>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  autoComplete="current-password"
-                  required
-                  disabled={loading || demoLoading || customerDemoLoading}
-                  className="form-input text-xs pl-9 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
+          <PasswordInput
+            id="password"
+            name="password"
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
 
-            <button
-              type="submit"
-              disabled={loading || demoLoading || customerDemoLoading}
-              className="btn-primary w-full text-xs py-2.5 font-semibold"
-            >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Signing in...</span>
-                </span>
-              ) : (
-                <span>Sign In</span>
-              )}
-            </button>
-          </form>
+          <div className="flex items-center justify-between text-xs pt-1">
+            <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-slate-300 text-brand-primary focus:ring-brand-primary/20"
+              />
+              <span>Remember me</span>
+            </label>
 
-          {/* Divider */}
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-brand-border w-full" />
-            <span className="bg-white px-3 text-[11px] font-medium text-brand-muted uppercase tracking-wider absolute">
-              or
+            <span className="text-brand-primary font-medium hover:underline cursor-pointer">
+              Forgot password?
             </span>
           </div>
 
-          {/* ONE-TAP DEMO ADMIN LOGIN SECTION */}
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={handleDemoAdminLogin}
-              disabled={loading || demoLoading || customerDemoLoading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-brand-indigo/30 hover:border-brand-indigo hover:bg-indigo-50/40 text-brand-indigo font-semibold text-xs rounded-btn transition-all duration-150 shadow-subtle focus:outline-none focus:ring-2 focus:ring-brand-indigo/20 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {demoLoading ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-brand-indigo/30 border-t-brand-indigo rounded-full animate-spin" />
-                  <span>Authenticating Demo Admin...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 text-brand-orange fill-brand-orange/20" />
-                  <span>Continue as Demo Admin</span>
-                </>
-              )}
-            </button>
-
-            {/* Demo Credentials Reference Box */}
-            <div className="p-3 bg-gray-50 border border-brand-border rounded-btn text-[11px] text-brand-muted space-y-1">
-              <div className="flex items-center justify-between text-brand-dark font-medium">
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-brand-indigo" />
-                  <span>Demo Admin Account:</span>
-                </span>
-                <span className="font-mono text-xs text-brand-indigo">admin@clickcart.com</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Default Password:</span>
-                <span className="font-mono text-gray-600">ClickCart@123</span>
-              </div>
-            </div>
-
-            {/* Customer Demo Option */}
-            <div className="pt-1 text-center">
-              <button
-                type="button"
-                onClick={handleDemoCustomerLogin}
-                disabled={loading || demoLoading || customerDemoLoading}
-                className="text-[11px] font-medium text-gray-500 hover:text-brand-indigo transition-colors"
-              >
-                {customerDemoLoading ? 'Signing in customer...' : 'Need customer view? Click to test as Demo Customer'}
-              </button>
-            </div>
+          <div className="pt-2">
+            <AnimatedOrderButton
+              type="submit"
+              text="Sign In"
+              loadingText="Authenticating..."
+              loading={loading}
+              fullWidth
+              size="md"
+            />
           </div>
+        </form>
 
-          {/* Back to store navigation */}
-          <div className="pt-2 border-t border-brand-border text-center">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-brand-dark transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Continue shopping without signing in</span>
-            </Link>
+        {/* Divider */}
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200" />
           </div>
-
+          <div className="relative flex justify-center text-xs uppercase tracking-wider text-slate-400">
+            <span className="bg-white px-3 font-semibold">Or Instant Demo Access</span>
+          </div>
         </div>
+
+        {/* One-Tap Demo Access Buttons */}
+        <div className="space-y-2.5">
+          <button
+            type="button"
+            onClick={handleDemoAdminLogin}
+            disabled={demoLoading || loading || customerDemoLoading}
+            className="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-slate-900 border border-amber-400 shadow-2xs transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+          >
+            {demoLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
+            ) : (
+              <Zap className="w-4 h-4 fill-slate-900 text-slate-900" />
+            )}
+            <span>⚡ Continue as Demo Admin</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDemoCustomerLogin}
+            disabled={demoLoading || loading || customerDemoLoading}
+            className="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-brand-primary border border-indigo-200 shadow-2xs transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+          >
+            {customerDemoLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-brand-primary" />
+            ) : (
+              <UserCheck className="w-4 h-4 text-brand-primary" />
+            )}
+            <span>Continue as Demo Customer</span>
+          </button>
+        </div>
+
+        {/* Link to Register */}
+        <div className="text-center pt-2 border-t border-slate-100 text-xs text-slate-500">
+          <span>Don't have an account? </span>
+          <Link to="/register" className="font-semibold text-brand-primary hover:underline">
+            Create an account
+          </Link>
+        </div>
+
       </div>
     </div>
   );
