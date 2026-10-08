@@ -1,19 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUp, Linkedin, Instagram, Github, X as CloseIcon } from 'lucide-react';
-
-/**
- * Modern X (formerly Twitter) official SVG brand icon
- */
-const XBrandIcon = ({ className = "w-5 h-5 sm:w-6 sm:h-6" }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    aria-hidden="true"
-  >
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-  </svg>
-);
+import { ArrowUp, Instagram, X as CloseIcon } from 'lucide-react';
 
 /**
  * ClickCart Premium Grid-Based Minimal Footer CTA
@@ -65,34 +51,15 @@ const ClickCartFooter = () => {
 
   // 4 Official brand social channels
   const socialLinks = [
-    {
-      name: 'LinkedIn',
-      icon: Linkedin,
-      href: 'https://linkedin.com',
-      label: 'ClickCart LinkedIn',
-      isCustomSvg: false,
-    },
+
     {
       name: 'Instagram',
       icon: Instagram,
       href: 'https://instagram.com',
       label: 'ClickCart Instagram',
       isCustomSvg: false,
-    },
-    {
-      name: 'GitHub',
-      icon: Github,
-      href: 'https://github.com',
-      label: 'ClickCart GitHub',
-      isCustomSvg: false,
-    },
-    {
-      name: 'X',
-      icon: XBrandIcon,
-      href: 'https://x.com',
-      label: 'ClickCart X (Twitter)',
-      isCustomSvg: true,
-    },
+    }
+
   ];
 
   const currentYear = new Date().getFullYear();
