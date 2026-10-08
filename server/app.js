@@ -41,8 +41,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Root route
-app.get('/', (req, res) => {
+const path = require('path');
+const fs = require('fs');
+
+const clientDistPath = path.join(__dirname, '../client/dist');
+const hasClientDist = fs.existsSync(clientDistPath);
+
+if (hasClientDist) {
+  // Serve static assets from Vite production bundle
+  app.use(express.static(clientDistPath));
+}
+
+// API root info endpoint
+app.get('/api', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'ClickCart API is running',
@@ -50,6 +61,18 @@ app.get('/', (req, res) => {
     tagline: 'Shop in a click.'
   });
 });
+
+// Fallback root endpoint if client dist is not built
+if (!hasClientDist) {
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'ClickCart API is running',
+      version: '1.0.0',
+      tagline: 'Shop in a click.'
+    });
+  });
+}
 
 // Health check endpoint verifying DB connection
 app.get('/api/health', async (req, res) => {
@@ -92,7 +115,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/returns', returnRoutes);
 
-// 404 Handler for undefined routes
+// Serve React SPA index.html for all non-API GET routes in production
+if (hasClientDist) {
+  app.get('*', (req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(clientDistPath, 'index.html'));
+    }
+    next();
+  });
+}
+
+// 404 Handler for undefined API routes
 app.use(notFoundHandler);
 
 // Centralized Global Error Handler

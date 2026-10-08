@@ -1,13 +1,15 @@
 {
   "name": "clickcart-monorepo",
   "version": "1.0.0",
-  "description": "ClickCart - Modern E-Commerce Cart & Order Management System (Project 10)",
+  "description": "ClickCart - Modern E-Commerce Cart & Order Management System",
   "scripts": {
-    "install:all": "npm --prefix server install && npm --prefix client install",
-    "server": "npm --prefix server run start",
+    "postinstall": "npm --prefix server install && npm --prefix client install",
+    "prebuild": "npm --prefix client install",
+    "build": "npm --prefix client run build",
+    "start": "node server/server.js",
+    "server": "node server/server.js",
     "client": "npm --prefix client run dev",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm --prefix server run start\" \"npm --prefix client run dev\"",
-    "build": "npm --prefix client run build",
     "seed": "npm --prefix server run seed"
   },
   "devDependencies": {
