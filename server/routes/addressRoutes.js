@@ -12,7 +12,23 @@ router.get('/', async (req, res, next) => {
   try {
     const userId = req.user.id || req.user.userId;
     const [rows] = await db.query(
-      'SELECT * FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC',
+      `SELECT 
+         id,
+         id AS address_id,
+         user_id,
+         full_name,
+         phone,
+         address_line,
+         city,
+         state,
+         postal_code,
+         country,
+         is_default,
+         created_at,
+         updated_at
+       FROM addresses 
+       WHERE user_id = $1 
+       ORDER BY is_default DESC, created_at DESC`,
       [userId]
     );
 
@@ -31,30 +47,45 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const userId = req.user.id || req.user.userId;
-    const { fullName, phone, addressLine, city, state, postalCode, country = 'India', isDefault = false } = req.body;
+    const { fullName, full_name, phone, addressLine, address_line, city, state, postalCode, postal_code, country = 'India', isDefault = false, is_default = false } = req.body;
 
-    if (!fullName || !phone || !addressLine || !city || !state || !postalCode) {
+    const name = (fullName || full_name || '').trim();
+    const ph = (phone || '').trim();
+    const line = (addressLine || address_line || '').trim();
+    const ct = (city || '').trim();
+    const st = (state || '').trim();
+    const post = (postalCode || postal_code || '').trim();
+    const shouldBeDefault = Boolean(isDefault || is_default);
+
+    if (!name || !ph || !line || !ct || !st || !post) {
       return res.status(400).json({
         success: false,
         message: 'All address fields are required.'
       });
     }
 
-    if (isDefault) {
-      await db.query('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [userId]);
+    if (shouldBeDefault) {
+      await db.query('UPDATE addresses SET is_default = FALSE WHERE user_id = $1', [userId]);
     }
 
-    const [result] = await db.query(
-      `INSERT INTO user_addresses (user_id, full_name, phone, address_line, city, state, postal_code, country, is_default)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, fullName.trim(), phone.trim(), addressLine.trim(), city.trim(), state.trim(), postalCode.trim(), country.trim(), isDefault ? 1 : 0]
+    const [insertRows, meta] = await db.query(
+      `INSERT INTO addresses (user_id, full_name, phone, address_line, city, state, postal_code, country, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [userId, name, ph, line, ct, st, post, country.trim(), shouldBeDefault]
     );
 
-    const [created] = await db.query('SELECT * FROM user_addresses WHERE address_id = ?', [result.insertId]);
+    const newId = insertRows[0]?.id || meta.insertId;
+
+    const [created] = await db.query(
+      `SELECT id, id AS address_id, user_id, full_name, phone, address_line, city, state, postal_code, country, is_default, created_at
+       FROM addresses WHERE id = $1`,
+      [newId]
+    );
 
     res.status(201).json({
       success: true,
-      data: created[0],
+      data: created[0] || insertRows[0],
       message: 'Address saved successfully.'
     });
   } catch (error) {
@@ -70,7 +101,7 @@ router.delete('/:id', async (req, res, next) => {
     const userId = req.user.id || req.user.userId;
     const addressId = parseInt(req.params.id, 10);
 
-    await db.query('DELETE FROM user_addresses WHERE address_id = ? AND user_id = ?', [addressId, userId]);
+    await db.query('DELETE FROM addresses WHERE id = $1 AND user_id = $2', [addressId, userId]);
 
     res.status(200).json({
       success: true,

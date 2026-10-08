@@ -10,9 +10,10 @@ const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
 const addressRoutes = require('./routes/addressRoutes');
 const returnRoutes = require('./routes/returnRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 const { seedUsers } = require('./seed');
 
-// Auto-seed demo admin and customer accounts in MySQL
+// Auto-seed demo admin and customer accounts in PostgreSQL / local store
 seedUsers().catch((err) => {
   console.warn('⚠️ Non-blocking user auto-seed notice:', err.message);
 });
@@ -87,9 +88,9 @@ app.get('/api/health', async (req, res) => {
       status: 'healthy',
       database: {
         connected: isConnected,
-        engine: db.isSqlite ? 'sqlite-embedded' : 'mysql',
+        engine: db.isPostgres ? 'supabase-postgres' : 'sqlite-embedded',
         latency_ms: dbLatency,
-        name: process.env.DB_NAME || 'ecommerce_db'
+        name: db.isPostgres ? 'postgres' : 'clickcart_db'
       },
       timestamp: new Date().toISOString()
     });
@@ -114,6 +115,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/returns', returnRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Serve React SPA index.html for all non-API GET routes in production
 if (hasClientDist) {

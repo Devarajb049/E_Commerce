@@ -1,3 +1,6 @@
+/**
+ * Auth Controller for ClickCart API (PostgreSQL / Supabase Ready)
+ */
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
@@ -41,13 +44,12 @@ const login = async (req, res, next) => {
 
     const normalizedEmail = trimmedEmail.toLowerCase();
 
-    // Query user in MySQL with parameterized statement
+    // Query user in PostgreSQL with parameterized statement
     const [rows] = await db.query(
-      'SELECT user_id, name, email, password_hash, role, created_at FROM Users WHERE LOWER(email) = ?',
+      'SELECT id, id AS user_id, full_name, full_name AS name, email, password_hash, role, created_at FROM users WHERE LOWER(email) = LOWER($1)',
       [normalizedEmail]
     );
 
-    // Uniform safe error message (does not reveal if email exists)
     if (!rows || rows.length === 0) {
       return res.status(401).json({
         success: false,
@@ -68,12 +70,15 @@ const login = async (req, res, next) => {
       });
     }
 
+    const userId = user.id || user.user_id;
+    const userName = user.full_name || user.name;
+
     // Sign minimal JWT payload
     const tokenPayload = {
-      id: user.user_id,
-      userId: user.user_id,
+      id: userId,
+      userId: userId,
       email: user.email,
-      name: user.name,
+      name: userName,
       role: user.role
     };
 
@@ -82,9 +87,10 @@ const login = async (req, res, next) => {
     });
 
     const safeUser = {
-      id: user.user_id,
-      userId: user.user_id,
-      name: user.name,
+      id: userId,
+      userId: userId,
+      name: userName,
+      full_name: userName,
       email: user.email,
       role: user.role,
       createdAt: user.created_at
@@ -94,7 +100,7 @@ const login = async (req, res, next) => {
       success: true,
       message: user.role === 'admin' 
         ? 'Welcome back, ClickCart Admin!' 
-        : `Welcome back, ${user.name}!`,
+        : `Welcome back, ${userName}!`,
       token,
       user: safeUser
     });
@@ -120,7 +126,7 @@ const getMe = async (req, res, next) => {
     }
 
     const [rows] = await db.query(
-      'SELECT user_id, name, email, role, created_at, updated_at FROM Users WHERE user_id = ?',
+      'SELECT id, id AS user_id, full_name, full_name AS name, email, role, created_at, updated_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -133,10 +139,12 @@ const getMe = async (req, res, next) => {
     }
 
     const user = rows[0];
+    const userName = user.full_name || user.name;
     const safeUser = {
-      id: user.user_id,
-      userId: user.user_id,
-      name: user.name,
+      id: user.id || user.user_id,
+      userId: user.id || user.user_id,
+      name: userName,
+      full_name: userName,
       email: user.email,
       role: user.role,
       createdAt: user.created_at,
@@ -160,9 +168,10 @@ const getMe = async (req, res, next) => {
  */
 const register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, full_name, email, password } = req.body;
+    const displayName = full_name || name;
 
-    if (!name || typeof name !== 'string' || !email || typeof email !== 'string' || !password || typeof password !== 'string') {
+    if (!displayName || typeof displayName !== 'string' || !email || typeof email !== 'string' || !password || typeof password !== 'string') {
       return res.status(400).json({
         success: false,
         message: 'Name, email, and password are required.',
@@ -170,7 +179,7 @@ const register = async (req, res, next) => {
       });
     }
 
-    const trimmedName = name.trim();
+    const trimmedName = displayName.trim();
     const trimmedEmail = email.trim();
 
     if (trimmedName.length < 2 || trimmedName.length > 100) {
@@ -201,7 +210,7 @@ const register = async (req, res, next) => {
 
     // Check if email already registered
     const [existing] = await db.query(
-      'SELECT user_id FROM Users WHERE LOWER(email) = ?',
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
       [normalizedEmail]
     );
 
@@ -217,12 +226,14 @@ const register = async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Enforce role: 'customer'. Self-registration can NEVER create admin accounts.
-    const [result] = await db.query(
-      'INSERT INTO Users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      [trimmedName, normalizedEmail, passwordHash, 'customer']
+    const [resultRows, meta] = await db.query(
+      `INSERT INTO users (full_name, email, password_hash, role) 
+       VALUES ($1, $2, $3, 'customer')
+       RETURNING id, full_name, email, role, created_at`,
+      [trimmedName, normalizedEmail, passwordHash]
     );
 
-    const newUserId = result.insertId;
+    const newUserId = resultRows[0]?.id || meta.insertId;
 
     // Sign JWT
     const token = jwt.sign(
@@ -241,6 +252,7 @@ const register = async (req, res, next) => {
       id: newUserId,
       userId: newUserId,
       name: trimmedName,
+      full_name: trimmedName,
       email: normalizedEmail,
       role: 'customer'
     };
@@ -258,14 +270,14 @@ const register = async (req, res, next) => {
 };
 
 /**
- * Update authenticated user profile (name, password)
+ * Update authenticated user profile
  * PUT /api/auth/profile
- * CRITICAL: Role cannot be modified through this API
  */
 const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user?.id || req.user?.userId;
-    const { name, currentPassword, newPassword } = req.body;
+    const { name, full_name, currentPassword, newPassword } = req.body;
+    const displayName = full_name || name;
 
     if (!userId) {
       return res.status(401).json({
@@ -276,7 +288,7 @@ const updateProfile = async (req, res, next) => {
     }
 
     const [rows] = await db.query(
-      'SELECT user_id, name, email, password_hash, role FROM Users WHERE user_id = ?',
+      'SELECT id, full_name, email, password_hash, role FROM users WHERE id = $1',
       [userId]
     );
 
@@ -289,10 +301,10 @@ const updateProfile = async (req, res, next) => {
     }
 
     const user = rows[0];
-    let updatedName = user.name;
+    let updatedName = user.full_name;
 
-    if (name && typeof name === 'string') {
-      const trimmed = name.trim();
+    if (displayName && typeof displayName === 'string') {
+      const trimmed = displayName.trim();
       if (trimmed.length < 2 || trimmed.length > 100) {
         return res.status(400).json({
           success: false,
@@ -332,12 +344,12 @@ const updateProfile = async (req, res, next) => {
 
       const newPasswordHash = await bcrypt.hash(newPassword, 10);
       await db.query(
-        'UPDATE Users SET name = ?, password_hash = ? WHERE user_id = ?',
+        'UPDATE users SET full_name = $1, password_hash = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
         [updatedName, newPasswordHash, userId]
       );
     } else {
       await db.query(
-        'UPDATE Users SET name = ? WHERE user_id = ?',
+        'UPDATE users SET full_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [updatedName, userId]
       );
     }
@@ -346,9 +358,10 @@ const updateProfile = async (req, res, next) => {
       success: true,
       message: 'Profile updated successfully.',
       user: {
-        id: user.user_id,
-        userId: user.user_id,
+        id: user.id,
+        userId: user.id,
         name: updatedName,
+        full_name: updatedName,
         email: user.email,
         role: user.role
       }

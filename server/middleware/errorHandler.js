@@ -38,21 +38,36 @@ const globalErrorHandler = (err, req, res, next) => {
     });
   }
 
-  // Handle MySQL duplicate key entry (code 1062)
-  if (err.errno === 1062 || err.code === 'ER_DUP_ENTRY') {
+  // Handle PostgreSQL unique constraint violation (code 23505) and legacy MySQL (1062)
+  if (err.code === '23505' || err.errno === 1062 || err.code === 'ER_DUP_ENTRY') {
+    let duplicateMessage = 'A record with the specified value already exists.';
+    if (err.detail && err.detail.includes('email')) {
+      duplicateMessage = 'An account with this email address already exists.';
+    } else if (err.detail && err.detail.includes('sku')) {
+      duplicateMessage = 'A product with this SKU already exists.';
+    }
     return res.status(409).json({
       success: false,
-      message: 'A record with the specified value already exists.',
+      message: duplicateMessage,
       error: 'DUPLICATE_ENTRY'
     });
   }
 
-  // Handle MySQL foreign key constraint failures (code 1451 / 1452)
-  if (err.errno === 1451 || err.code === 'ER_ROW_IS_REFERENCED_2') {
+  // Handle PostgreSQL foreign key violation (code 23503) and legacy MySQL (1451 / 1452)
+  if (err.code === '23503' || err.errno === 1451 || err.code === 'ER_ROW_IS_REFERENCED_2') {
     return res.status(409).json({
       success: false,
-      message: 'Cannot delete or update this record because related items depend on it.',
+      message: 'Cannot perform this action because related records depend on it.',
       error: 'FOREIGN_KEY_CONFLICT'
+    });
+  }
+
+  // Handle PostgreSQL check constraint failure (code 23514)
+  if (err.code === '23514') {
+    return res.status(422).json({
+      success: false,
+      message: 'Database check constraint failed for the submitted values.',
+      error: 'CHECK_CONSTRAINT_VIOLATION'
     });
   }
 

@@ -19,7 +19,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
     }
 
     const [orderRows] = await db.query(
-      'SELECT * FROM Orders WHERE order_id = ? AND (user_id = ? OR email = ?)',
+      'SELECT id, total, order_status FROM orders WHERE id = $1 AND (user_id = $2 OR email = $3)',
       [orderId, userId, req.user.email]
     );
 
@@ -31,27 +31,31 @@ router.post('/', authenticateToken, async (req, res, next) => {
     }
 
     const order = orderRows[0];
-    if (order.order_status !== 'DELIVERED') {
+    const statusUpper = (order.order_status || '').toUpperCase();
+    if (statusUpper !== 'DELIVERED') {
       return res.status(400).json({
         success: false,
         message: 'Return requests can only be submitted for delivered orders.'
       });
     }
 
-    const [result] = await db.query(
+    const [insertRows, meta] = await db.query(
       `INSERT INTO order_returns (order_id, user_id, product_id, reason, status, refund_amount)
-       VALUES (?, ?, ?, ?, 'REQUESTED', ?)`,
-      [orderId, userId, productId || null, reason.trim(), order.total_amount]
+       VALUES ($1, $2, $3, $4, 'REQUESTED', $5)
+       RETURNING *`,
+      [orderId, userId, productId || null, reason.trim(), order.total]
     );
 
     await db.query(
-      "UPDATE Orders SET order_status = 'RETURN_REQUESTED' WHERE order_id = ?",
+      "UPDATE orders SET order_status = 'RETURN_REQUESTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
       [orderId]
     );
 
+    const returnId = insertRows[0]?.id || meta.insertId;
+
     res.status(201).json({
       success: true,
-      data: { return_id: result.insertId, order_id: orderId, status: 'REQUESTED' },
+      data: { return_id: returnId, id: returnId, order_id: orderId, status: 'REQUESTED' },
       message: 'Return request submitted successfully. Our team will review it.'
     });
   } catch (error) {
@@ -68,14 +72,27 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const isAdmin = req.user.role === 'admin';
 
     let sql = `
-      SELECT r.*, o.order_number, o.customer_name, o.total_amount
+      SELECT 
+        r.id,
+        r.id AS return_id,
+        r.order_id,
+        r.user_id,
+        r.product_id,
+        r.reason,
+        r.status,
+        r.refund_amount,
+        r.admin_notes,
+        r.created_at,
+        o.order_number,
+        o.shipping_full_name AS customer_name,
+        o.total AS total_amount
       FROM order_returns r
-      JOIN Orders o ON r.order_id = o.order_id
+      JOIN orders o ON r.order_id = o.id
     `;
     const params = [];
 
     if (!isAdmin) {
-      sql += ' WHERE r.user_id = ?';
+      sql += ' WHERE r.user_id = $1';
       params.push(userId);
     }
 
@@ -109,16 +126,16 @@ router.put('/:id/status', authenticateToken, requireAdmin, async (req, res, next
     }
 
     await db.query(
-      'UPDATE order_returns SET status = ?, admin_notes = ? WHERE return_id = ?',
+      'UPDATE order_returns SET status = $1, admin_notes = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
       [status, adminNotes || '', returnId]
     );
 
     // If completed, update order to RETURNED and payment_status to REFUNDED
     if (status === 'COMPLETED') {
-      const [retRows] = await db.query('SELECT order_id FROM order_returns WHERE return_id = ?', [returnId]);
+      const [retRows] = await db.query('SELECT order_id FROM order_returns WHERE id = $1', [returnId]);
       if (retRows.length > 0) {
         await db.query(
-          "UPDATE Orders SET order_status = 'RETURNED', payment_status = 'REFUNDED' WHERE order_id = ?",
+          "UPDATE orders SET order_status = 'RETURNED', payment_status = 'REFUNDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
           [retRows[0].order_id]
         );
       }

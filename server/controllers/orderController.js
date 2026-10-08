@@ -1,7 +1,7 @@
 /**
- * Order Controller for ClickCart API
- * Implements strict MySQL transaction handling, stock checks, server-side price calculation,
- * and IAM customer order ownership protection.
+ * Order Controller for ClickCart API (PostgreSQL / Supabase Ready)
+ * Implements strict PostgreSQL transactions, row-level locking (FOR UPDATE),
+ * price snapshots, and IAM customer order ownership protection.
  */
 const db = require('../config/db');
 const { ApiError } = require('../middleware/errorHandler');
@@ -16,14 +16,13 @@ const generateOrderNumber = () => {
 };
 
 /**
- * POST /api/orders - Create an order with atomic MySQL transaction
- * Attaches authenticated user_id from req.user if available
+ * POST /api/orders - Create an order with atomic PostgreSQL transaction
  */
 const createOrder = async (req, res, next) => {
   let connection;
 
   try {
-    const { customer, items } = req.body;
+    const { customer, items, shipping_fee = 0, discount = 0, payment_method = 'cod' } = req.body;
     const authUserId = req.user?.id || req.user?.userId || null;
 
     if (!customer || !items || !Array.isArray(items) || items.length === 0) {
@@ -39,7 +38,7 @@ const createOrder = async (req, res, next) => {
 
     // Verify each product and lock row (FOR UPDATE) to prevent race conditions
     for (const item of items) {
-      const productId = parseInt(item.productId || item.product_id, 10);
+      const productId = parseInt(item.productId || item.product_id || item.id, 10);
       const requestedQty = parseInt(item.quantity, 10);
 
       if (isNaN(productId) || isNaN(requestedQty) || requestedQty <= 0) {
@@ -48,7 +47,7 @@ const createOrder = async (req, res, next) => {
       }
 
       const [productRows] = await connection.query(
-        'SELECT product_id, product_name, price, stock_quantity, image_url FROM Products WHERE product_id = ? FOR UPDATE',
+        'SELECT id, name, price, stock, image FROM products WHERE id = $1 FOR UPDATE',
         [productId]
       );
 
@@ -58,13 +57,14 @@ const createOrder = async (req, res, next) => {
       }
 
       const product = productRows[0];
+      const availableStock = parseInt(product.stock, 10);
 
       // Check stock availability
-      if (product.stock_quantity < requestedQty) {
+      if (availableStock < requestedQty) {
         await connection.rollback();
         throw new ApiError(
           400,
-          `Insufficient stock for '${product.product_name}'. Requested: ${requestedQty}, Available in stock: ${product.stock_quantity}.`,
+          `Insufficient stock for '${product.name}'. Requested: ${requestedQty}, Available in stock: ${availableStock}.`,
           'INSUFFICIENT_STOCK'
         );
       }
@@ -75,56 +75,78 @@ const createOrder = async (req, res, next) => {
       calculatedSubtotal += lineSubtotal;
 
       validatedItems.push({
-        product_id: product.product_id,
-        product_name: product.product_name,
+        product_id: product.id,
+        product_name: product.name,
         quantity: requestedQty,
         price: currentPrice,
         subtotal: lineSubtotal,
-        current_stock: product.stock_quantity
+        current_stock: availableStock
       });
     }
 
     // Finalize financial calculations
     const subtotal = Math.round(calculatedSubtotal * 100) / 100;
     const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-    const totalAmount = Math.round((subtotal + tax) * 100) / 100;
+    const shippingFee = Math.round(parseFloat(shipping_fee || 0) * 100) / 100;
+    const discountAmount = Math.round(parseFloat(discount || 0) * 100) / 100;
+    const totalAmount = Math.round((subtotal + tax + shippingFee - discountAmount) * 100) / 100;
     const orderNumber = generateOrderNumber();
 
+    const normalizedPaymentMethod = (payment_method || 'cod').toLowerCase();
+    const orderStatus = 'order_placed';
+
     // 1. Insert Orders record with authenticated user_id
-    const [orderResult] = await connection.query(
-      `INSERT INTO Orders 
-       (order_number, user_id, customer_name, email, phone, address, city, state, pincode, subtotal, tax, total_amount, order_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLACED')`,
+    const [orderRows, orderMeta] = await connection.query(
+      `INSERT INTO orders 
+       (order_number, user_id, email, subtotal, tax, shipping_fee, discount, total, payment_method, payment_status, order_status, shipping_full_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_postal_code, shipping_country)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $14, $15, $16, 'India')
+       RETURNING id, order_number, total, created_at`,
       [
         orderNumber,
         authUserId,
-        customer.name.trim(),
         customer.email.trim(),
+        subtotal,
+        tax,
+        shippingFee,
+        discountAmount,
+        totalAmount,
+        normalizedPaymentMethod,
+        orderStatus,
+        customer.name.trim(),
         customer.phone.trim(),
         customer.address.trim(),
         customer.city.trim(),
         customer.state.trim(),
-        customer.pincode.trim(),
-        subtotal,
-        tax,
-        totalAmount
+        customer.pincode ? customer.pincode.trim() : (customer.postalCode ? customer.postalCode.trim() : '000000')
       ]
     );
 
-    const orderId = orderResult.insertId;
+    const orderId = orderRows[0]?.id || orderMeta.insertId;
 
-    // 2. Insert Order_Items records & update Product stock
+    // 2. Insert Order_Items records & safely decrement Product stock
     for (const item of validatedItems) {
       await connection.query(
-        `INSERT INTO Order_Items (order_id, product_id, quantity, price, subtotal)
-         VALUES (?, ?, ?, ?, ?)`,
-        [orderId, item.product_id, item.quantity, item.price, item.subtotal]
+        `INSERT INTO order_items (order_id, product_id, product_name, product_price, quantity, subtotal)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [orderId, item.product_id, item.product_name, item.price, item.quantity, item.subtotal]
       );
 
       await connection.query(
-        'UPDATE Products SET stock_quantity = stock_quantity - ? WHERE product_id = ?',
+        'UPDATE products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND stock >= $1',
         [item.quantity, item.product_id]
       );
+    }
+
+    // 3. If authenticated user has active carts, clear their cart items
+    if (authUserId) {
+      try {
+        await connection.query(
+          `DELETE FROM cart_items WHERE cart_id IN (SELECT id FROM carts WHERE user_id = $1)`,
+          [authUserId]
+        );
+      } catch (cartErr) {
+        // Non-blocking for order placement
+      }
     }
 
     // Commit transaction atomically
@@ -133,6 +155,7 @@ const createOrder = async (req, res, next) => {
     return res.status(201).json({
       success: true,
       data: {
+        id: orderId,
         order_id: orderId,
         order_number: orderNumber,
         user_id: authUserId,
@@ -141,6 +164,7 @@ const createOrder = async (req, res, next) => {
         subtotal,
         tax,
         total_amount: totalAmount,
+        total: totalAmount,
         order_status: 'PLACED',
         item_count: validatedItems.length
       },
@@ -151,7 +175,7 @@ const createOrder = async (req, res, next) => {
       try {
         await connection.rollback();
       } catch (rollbackErr) {
-        console.error('Error rolling back transaction:', rollbackErr);
+        console.error('Error rolling back PostgreSQL transaction:', rollbackErr);
       }
     }
     next(error);
@@ -171,49 +195,60 @@ const getAllOrders = async (req, res, next) => {
 
     let sql = `
       SELECT 
-        o.order_id,
+        o.id,
+        o.id AS order_id,
         o.order_number,
         o.user_id,
-        o.customer_name,
+        o.shipping_full_name AS customer_name,
+        o.shipping_full_name,
         o.email,
-        o.phone,
-        o.city,
-        o.state,
-        o.pincode,
+        o.shipping_phone AS phone,
+        o.shipping_city AS city,
+        o.shipping_state AS state,
+        o.shipping_postal_code AS pincode,
         o.subtotal,
         o.tax,
-        o.total_amount,
+        o.shipping_fee,
+        o.discount,
+        o.total AS total_amount,
+        o.total,
         o.order_status,
+        o.payment_method,
+        o.payment_status,
         o.created_at,
-        COUNT(oi.order_item_id) AS total_items,
-        SUM(oi.quantity) AS total_units
-      FROM Orders o
-      LEFT JOIN Order_Items oi ON o.order_id = oi.order_id
+        COUNT(oi.id) AS total_items,
+        COALESCE(SUM(oi.quantity), 0) AS total_units
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
       WHERE 1=1
     `;
     const params = [];
+    let paramIndex = 1;
 
     if (status && status !== 'all') {
-      sql += ' AND o.order_status = ?';
-      params.push(status.toUpperCase());
+      sql += ` AND (LOWER(o.order_status) = LOWER($${paramIndex}) OR UPPER(o.order_status) = UPPER($${paramIndex}))`;
+      params.push(status.trim());
+      paramIndex++;
     }
 
     if (email && email.trim() !== '') {
-      sql += ' AND LOWER(o.email) = LOWER(?)';
+      sql += ` AND LOWER(o.email) = LOWER($${paramIndex})`;
       params.push(email.trim());
+      paramIndex++;
     }
 
     if (search && search.trim() !== '') {
       const term = `%${search.trim()}%`;
-      sql += ' AND (o.order_number LIKE ? OR o.customer_name LIKE ? OR o.email LIKE ? OR o.phone LIKE ?)';
-      params.push(term, term, term, term);
+      sql += ` AND (o.order_number ILIKE $${paramIndex} OR o.shipping_full_name ILIKE $${paramIndex} OR o.email ILIKE $${paramIndex} OR o.shipping_phone ILIKE $${paramIndex})`;
+      params.push(term);
+      paramIndex++;
     }
 
     sql += `
       GROUP BY 
-        o.order_id, o.order_number, o.user_id, o.customer_name, o.email, o.phone, 
-        o.city, o.state, o.pincode, o.subtotal, o.tax, o.total_amount, 
-        o.order_status, o.created_at
+        o.id, o.order_number, o.user_id, o.shipping_full_name, o.email, o.shipping_phone, 
+        o.shipping_city, o.shipping_state, o.shipping_postal_code, o.subtotal, o.tax, o.shipping_fee, o.discount, o.total, 
+        o.order_status, o.payment_method, o.payment_status, o.created_at
       ORDER BY o.created_at DESC;
     `;
 
@@ -232,7 +267,6 @@ const getAllOrders = async (req, res, next) => {
 
 /**
  * GET /api/orders/my-orders - Customer gets only their own orders
- * Strictly uses authenticated req.user.id
  */
 const getMyOrders = async (req, res, next) => {
   try {
@@ -249,30 +283,37 @@ const getMyOrders = async (req, res, next) => {
 
     const sql = `
       SELECT 
-        o.order_id,
+        o.id,
+        o.id AS order_id,
         o.order_number,
         o.user_id,
-        o.customer_name,
+        o.shipping_full_name AS customer_name,
+        o.shipping_full_name,
         o.email,
-        o.phone,
-        o.address,
-        o.city,
-        o.state,
-        o.pincode,
+        o.shipping_phone AS phone,
+        o.shipping_address AS address,
+        o.shipping_city AS city,
+        o.shipping_state AS state,
+        o.shipping_postal_code AS pincode,
         o.subtotal,
         o.tax,
-        o.total_amount,
+        o.shipping_fee,
+        o.discount,
+        o.total AS total_amount,
+        o.total,
         o.order_status,
+        o.payment_method,
+        o.payment_status,
         o.created_at,
-        COUNT(oi.order_item_id) AS total_items,
+        COUNT(oi.id) AS total_items,
         COALESCE(SUM(oi.quantity), 0) AS total_units
-      FROM Orders o
-      LEFT JOIN Order_Items oi ON o.order_id = oi.order_id
-      WHERE (o.user_id = ? OR (o.user_id IS NULL AND LOWER(o.email) = LOWER(?)))
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      WHERE (o.user_id = $1 OR (o.user_id IS NULL AND LOWER(o.email) = LOWER($2)))
       GROUP BY 
-        o.order_id, o.order_number, o.user_id, o.customer_name, o.email, o.phone, 
-        o.address, o.city, o.state, o.pincode, o.subtotal, o.tax, o.total_amount, 
-        o.order_status, o.created_at
+        o.id, o.order_number, o.user_id, o.shipping_full_name, o.email, o.shipping_phone, 
+        o.shipping_address, o.shipping_city, o.shipping_state, o.shipping_postal_code, o.subtotal, o.tax, o.shipping_fee, o.discount, o.total, 
+        o.order_status, o.payment_method, o.payment_status, o.created_at
       ORDER BY o.created_at DESC;
     `;
 
@@ -291,22 +332,47 @@ const getMyOrders = async (req, res, next) => {
 
 /**
  * GET /api/orders/:id - Get complete order details with item list and invoice data
- * Enforces ownership: Admin can access any order; Customer can only access their own order
  */
 const getOrderById = async (req, res, next) => {
   try {
     const orderIdentifier = req.params.id;
-    const currentUser = req.user; // from authenticateToken or optionalAuth
+    const currentUser = req.user;
 
-    let orderSql = 'SELECT * FROM Orders WHERE ';
+    let orderSql = `
+      SELECT 
+        o.id,
+        o.id AS order_id,
+        o.order_number,
+        o.user_id,
+        o.shipping_full_name AS customer_name,
+        o.shipping_full_name,
+        o.email,
+        o.shipping_phone AS phone,
+        o.shipping_address AS address,
+        o.shipping_city AS city,
+        o.shipping_state AS state,
+        o.shipping_postal_code AS pincode,
+        o.subtotal,
+        o.tax,
+        o.shipping_fee,
+        o.discount,
+        o.total AS total_amount,
+        o.total,
+        o.order_status,
+        o.payment_method,
+        o.payment_status,
+        o.created_at
+      FROM orders o
+      WHERE 
+    `;
     const params = [];
 
     const isNumeric = /^\d+$/.test(orderIdentifier);
     if (isNumeric) {
-      orderSql += 'order_id = ? OR order_number = ?';
+      orderSql += '(o.id = $1 OR o.order_number = $2)';
       params.push(parseInt(orderIdentifier, 10), orderIdentifier);
     } else {
-      orderSql += 'order_number = ?';
+      orderSql += 'o.order_number = $1';
       params.push(orderIdentifier);
     }
 
@@ -323,8 +389,8 @@ const getOrderById = async (req, res, next) => {
       if (currentUser.role !== 'admin') {
         const orderUserId = order.user_id;
         const currentUserId = currentUser.id || currentUser.userId;
-        const matchesUser = orderUserId && orderUserId === currentUserId;
-        const matchesEmail = !orderUserId && order.email.toLowerCase() === currentUser.email.toLowerCase();
+        const matchesUser = orderUserId && parseInt(orderUserId, 10) === parseInt(currentUserId, 10);
+        const matchesEmail = !orderUserId && order.email && order.email.toLowerCase() === currentUser.email.toLowerCase();
 
         if (!matchesUser && !matchesEmail) {
           return res.status(403).json({
@@ -335,7 +401,6 @@ const getOrderById = async (req, res, next) => {
         }
       }
     } else {
-      // If unauthenticated, require authentication
       return res.status(401).json({
         success: false,
         message: 'Authentication required to access order details.',
@@ -346,21 +411,24 @@ const getOrderById = async (req, res, next) => {
     // Fetch order items with snapshot prices & current product info
     const [itemRows] = await db.query(
       `SELECT 
-         oi.order_item_id,
+         oi.id,
+         oi.id AS order_item_id,
          oi.order_id,
          oi.product_id,
          oi.quantity,
-         oi.price,
+         oi.product_price AS price,
+         oi.product_price,
          oi.subtotal,
-         p.product_name,
-         p.image_url,
-         c.category_name
-       FROM Order_Items oi
-       LEFT JOIN Products p ON oi.product_id = p.product_id
-       LEFT JOIN Categories c ON p.category_id = c.category_id
-       WHERE oi.order_id = ?
-       ORDER BY oi.order_item_id ASC`,
-      [order.order_id]
+         oi.product_name,
+         p.image AS image_url,
+         p.image,
+         c.name AS category_name
+       FROM order_items oi
+       LEFT JOIN products p ON oi.product_id = p.id
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE oi.order_id = $1
+       ORDER BY oi.id ASC`,
+      [order.id]
     );
 
     return res.status(200).json({
@@ -388,41 +456,45 @@ const updateOrderStatus = async (req, res, next) => {
       throw new ApiError(400, 'Invalid order ID parameter.', 'INVALID_ID');
     }
 
-    const validStatuses = ['PLACED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
-    if (!status || !validStatuses.includes(status.toUpperCase())) {
+    const validStatuses = [
+      'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded',
+      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'
+    ];
+    if (!status || !validStatuses.includes(status)) {
       throw new ApiError(
         422,
-        `Invalid status '${status}'. Must be one of: ${validStatuses.join(', ')}`,
+        `Invalid status '${status}'. Must be one of: order_placed, processing, shipped, delivered, cancelled`,
         'INVALID_STATUS'
       );
     }
 
-    const newStatus = status.toUpperCase();
-
-    const [existing] = await db.query('SELECT order_id, order_status FROM Orders WHERE order_id = ?', [orderId]);
+    const [existing] = await db.query('SELECT id, order_status FROM orders WHERE id = $1', [orderId]);
     if (existing.length === 0) {
       throw new ApiError(404, `Order ID ${orderId} not found.`, 'ORDER_NOT_FOUND');
     }
 
+    const isCancelling = status.toUpperCase() === 'CANCELLED' || status.toLowerCase() === 'cancelled';
+    const wasCancelled = existing[0].order_status.toUpperCase() === 'CANCELLED' || existing[0].order_status.toLowerCase() === 'cancelled';
+
     // If transitioning to CANCELLED from an active state, restore product stock
-    if (newStatus === 'CANCELLED' && existing[0].order_status !== 'CANCELLED') {
-      const [items] = await db.query('SELECT product_id, quantity FROM Order_Items WHERE order_id = ?', [orderId]);
+    if (isCancelling && !wasCancelled) {
+      const [items] = await db.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of items) {
         await db.query(
-          'UPDATE Products SET stock_quantity = stock_quantity + ? WHERE product_id = ?',
+          'UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [item.quantity, item.product_id]
         );
       }
     }
 
-    await db.query('UPDATE Orders SET order_status = ? WHERE order_id = ?', [newStatus, orderId]);
+    await db.query('UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [status, orderId]);
 
-    const [updated] = await db.query('SELECT * FROM Orders WHERE order_id = ?', [orderId]);
+    const [updated] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
 
     return res.status(200).json({
       success: true,
       data: updated[0],
-      message: `Order status updated to '${newStatus}'.`
+      message: `Order status updated to '${status}'.`
     });
   } catch (error) {
     next(error);
@@ -441,7 +513,7 @@ const cancelOrder = async (req, res, next) => {
       throw new ApiError(400, 'Invalid order ID parameter.', 'INVALID_ID');
     }
 
-    const [existing] = await db.query('SELECT * FROM Orders WHERE order_id = ?', [orderId]);
+    const [existing] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
     if (existing.length === 0) {
       throw new ApiError(404, `Order ID ${orderId} not found.`, 'ORDER_NOT_FOUND');
     }
@@ -449,7 +521,7 @@ const cancelOrder = async (req, res, next) => {
     const order = existing[0];
 
     // Verify ownership
-    if (req.user.role !== 'admin' && order.user_id !== currentUserId) {
+    if (req.user.role !== 'admin' && parseInt(order.user_id, 10) !== parseInt(currentUserId, 10)) {
       return res.status(403).json({
         success: false,
         message: 'You can only cancel your own orders.',
@@ -457,7 +529,8 @@ const cancelOrder = async (req, res, next) => {
       });
     }
 
-    if (order.order_status !== 'PLACED') {
+    const statusUpper = (order.order_status || '').toUpperCase();
+    if (statusUpper !== 'PLACED' && statusUpper !== 'ORDER_PLACED') {
       return res.status(400).json({
         success: false,
         message: `Orders with status '${order.order_status}' cannot be cancelled online.`,
@@ -466,15 +539,15 @@ const cancelOrder = async (req, res, next) => {
     }
 
     // Restore stock
-    const [items] = await db.query('SELECT product_id, quantity FROM Order_Items WHERE order_id = ?', [orderId]);
+    const [items] = await db.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
     for (const item of items) {
       await db.query(
-        'UPDATE Products SET stock_quantity = stock_quantity + ? WHERE product_id = ?',
+        'UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [item.quantity, item.product_id]
       );
     }
 
-    await db.query("UPDATE Orders SET order_status = 'CANCELLED' WHERE order_id = ?", [orderId]);
+    await db.query("UPDATE orders SET order_status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [orderId]);
 
     return res.status(200).json({
       success: true,

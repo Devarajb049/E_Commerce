@@ -1,5 +1,5 @@
 /**
- * Product Controller for ClickCart API
+ * Product Controller for ClickCart API (PostgreSQL / Supabase Ready)
  */
 const db = require('../config/db');
 const { ApiError } = require('../middleware/errorHandler');
@@ -11,73 +11,87 @@ const getAllProducts = async (req, res, next) => {
 
     let sql = `
       SELECT 
-        p.product_id,
+        p.id,
+        p.id AS product_id,
         p.category_id,
-        c.category_name,
-        p.product_name,
+        c.name AS category_name,
+        c.name,
+        p.name,
+        p.name AS product_name,
+        p.slug,
         p.description,
         p.price,
-        p.stock_quantity,
-        p.image_url,
+        p.stock,
+        p.stock AS stock_quantity,
+        p.image,
+        p.image AS image_url,
+        p.sku,
+        p.status,
         p.created_at,
         p.updated_at
-      FROM Products p
-      INNER JOIN Categories c ON p.category_id = c.category_id
+      FROM products p
+      INNER JOIN categories c ON p.category_id = c.id
       WHERE 1=1
     `;
     const params = [];
+    let paramIndex = 1;
 
     // Search query across name and description
     if (search && search.trim() !== '') {
       const searchTerm = `%${search.trim()}%`;
-      sql += ' AND (p.product_name LIKE ? OR p.description LIKE ?)';
-      params.push(searchTerm, searchTerm);
+      sql += ` AND (p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex})`;
+      params.push(searchTerm);
+      paramIndex++;
     }
 
-    // Category filter by ID or name
+    // Category filter by ID, slug, or name
     if (category && category !== 'all' && category !== '') {
       const catId = parseInt(category, 10);
       if (!isNaN(catId)) {
-        sql += ' AND p.category_id = ?';
+        sql += ` AND p.category_id = $${paramIndex}`;
         params.push(catId);
+        paramIndex++;
       } else {
-        sql += ' AND LOWER(c.category_name) = LOWER(?)';
+        sql += ` AND (LOWER(c.name) = LOWER($${paramIndex}) OR LOWER(c.slug) = LOWER($${paramIndex}))`;
         params.push(category.trim());
+        paramIndex++;
       }
     }
 
     // Price filters
     if (min_price && !isNaN(parseFloat(min_price))) {
-      sql += ' AND p.price >= ?';
+      sql += ` AND p.price >= $${paramIndex}`;
       params.push(parseFloat(min_price));
+      paramIndex++;
     }
 
     if (max_price && !isNaN(parseFloat(max_price))) {
-      sql += ' AND p.price <= ?';
+      sql += ` AND p.price <= $${paramIndex}`;
       params.push(parseFloat(max_price));
+      paramIndex++;
     }
 
     // Stock filter
     if (in_stock_only === 'true' || in_stock_only === '1') {
-      sql += ' AND p.stock_quantity > 0';
+      sql += ' AND p.stock > 0';
     }
 
     // Sorting
     switch (sort) {
       case 'price_asc':
-        sql += ' ORDER BY p.price ASC, p.product_id ASC';
+        sql += ' ORDER BY p.price ASC, p.id ASC';
         break;
       case 'price_desc':
-        sql += ' ORDER BY p.price DESC, p.product_id ASC';
+        sql += ' ORDER BY p.price DESC, p.id ASC';
         break;
       case 'name_asc':
-        sql += ' ORDER BY p.product_name ASC';
+        sql += ' ORDER BY p.name ASC';
         break;
       case 'newest':
-        sql += ' ORDER BY p.created_at DESC, p.product_id DESC';
+        sql += ' ORDER BY p.created_at DESC, p.id DESC';
         break;
       default:
-        sql += ' ORDER BY p.product_id ASC';
+        sql += ' ORDER BY p.id ASC';
         break;
     }
 
@@ -94,34 +108,40 @@ const getAllProducts = async (req, res, next) => {
   }
 };
 
-// GET /api/products/:id - Get single product by ID
+// GET /api/products/:id - Get single product by ID or slug
 const getProductById = async (req, res, next) => {
   try {
-    const productId = parseInt(req.params.id, 10);
-    if (isNaN(productId)) {
-      throw new ApiError(400, 'Invalid product ID parameter.', 'INVALID_ID');
-    }
+    const param = req.params.id;
+    const isNumeric = /^\d+$/.test(param);
 
     const query = `
       SELECT 
-        p.product_id,
+        p.id,
+        p.id AS product_id,
         p.category_id,
-        c.category_name,
-        p.product_name,
+        c.name AS category_name,
+        c.name,
+        p.name,
+        p.name AS product_name,
+        p.slug,
         p.description,
         p.price,
-        p.stock_quantity,
-        p.image_url,
+        p.stock,
+        p.stock AS stock_quantity,
+        p.image,
+        p.image AS image_url,
+        p.sku,
+        p.status,
         p.created_at,
         p.updated_at
-      FROM Products p
-      INNER JOIN Categories c ON p.category_id = c.category_id
-      WHERE p.product_id = ?
+      FROM products p
+      INNER JOIN categories c ON p.category_id = c.id
+      WHERE ${isNumeric ? 'p.id = $1' : 'p.slug = $1'}
     `;
-    const [rows] = await db.query(query, [productId]);
+    const [rows] = await db.query(query, [isNumeric ? parseInt(param, 10) : param]);
 
     if (rows.length === 0) {
-      throw new ApiError(404, `Product with ID ${productId} not found.`, 'PRODUCT_NOT_FOUND');
+      throw new ApiError(404, `Product '${param}' not found.`, 'PRODUCT_NOT_FOUND');
     }
 
     return res.status(200).json({
@@ -134,34 +154,47 @@ const getProductById = async (req, res, next) => {
   }
 };
 
-// POST /api/products - Create a new product
+// POST /api/products - Create a new product (Admin)
 const createProduct = async (req, res, next) => {
   try {
-    const { category_id, product_name, description, price, stock_quantity, image_url } = req.body;
+    const { category_id, product_name, name, description, price, stock_quantity, stock, image_url, image, sku } = req.body;
+    const prodName = product_name || name;
+    const prodStock = stock_quantity !== undefined ? stock_quantity : stock;
+    const prodImage = image_url || image;
+
+    if (!prodName || !category_id || price === undefined) {
+      throw new ApiError(400, 'Product name, category ID, and price are required.', 'VALIDATION_ERROR');
+    }
 
     // Check if category exists
-    const [cat] = await db.query('SELECT category_id FROM Categories WHERE category_id = ?', [category_id]);
+    const [cat] = await db.query('SELECT id FROM categories WHERE id = $1', [category_id]);
     if (cat.length === 0) {
       throw new ApiError(404, `Category ID ${category_id} does not exist.`, 'CATEGORY_NOT_FOUND');
     }
 
-    const [result] = await db.query(
-      `INSERT INTO Products (category_id, product_name, description, price, stock_quantity, image_url)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [category_id, product_name, description || null, price, stock_quantity, image_url || null]
+    const slug = prodName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now().toString().slice(-4);
+    const prodSku = sku || 'SKU-' + Date.now().toString().slice(-6);
+
+    const [insertRows, meta] = await db.query(
+      `INSERT INTO products (category_id, name, slug, description, price, stock, image, sku, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+       RETURNING *`,
+      [category_id, prodName, slug, description || null, price, prodStock || 0, prodImage || null, prodSku]
     );
 
+    const newId = insertRows[0]?.id || meta.insertId;
+
     const [newProduct] = await db.query(
-      `SELECT p.*, c.category_name 
-       FROM Products p 
-       JOIN Categories c ON p.category_id = c.category_id 
-       WHERE p.product_id = ?`,
-      [result.insertId]
+      `SELECT p.id, p.id AS product_id, p.name, p.name AS product_name, p.price, p.stock, p.stock AS stock_quantity, p.image, p.image AS image_url, c.name AS category_name
+       FROM products p 
+       JOIN categories c ON p.category_id = c.id 
+       WHERE p.id = $1`,
+      [newId]
     );
 
     return res.status(201).json({
       success: true,
-      data: newProduct[0],
+      data: newProduct[0] || insertRows[0],
       message: 'Product created successfully.'
     });
   } catch (error) {
@@ -169,7 +202,7 @@ const createProduct = async (req, res, next) => {
   }
 };
 
-// PUT /api/products/:id - Update product
+// PUT /api/products/:id - Update product (Admin)
 const updateProduct = async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id, 10);
@@ -177,32 +210,43 @@ const updateProduct = async (req, res, next) => {
       throw new ApiError(400, 'Invalid product ID parameter.', 'INVALID_ID');
     }
 
-    const { category_id, product_name, description, price, stock_quantity, image_url } = req.body;
+    const { category_id, product_name, name, description, price, stock_quantity, stock, image_url, image } = req.body;
+    const prodName = product_name || name;
+    const prodStock = stock_quantity !== undefined ? stock_quantity : stock;
+    const prodImage = image_url || image;
 
     // Check if product exists
-    const [existing] = await db.query('SELECT product_id FROM Products WHERE product_id = ?', [productId]);
+    const [existing] = await db.query('SELECT id, name FROM products WHERE id = $1', [productId]);
     if (existing.length === 0) {
       throw new ApiError(404, `Product with ID ${productId} not found.`, 'PRODUCT_NOT_FOUND');
     }
 
-    // Check if category exists
-    const [cat] = await db.query('SELECT category_id FROM Categories WHERE category_id = ?', [category_id]);
-    if (cat.length === 0) {
-      throw new ApiError(404, `Category ID ${category_id} does not exist.`, 'CATEGORY_NOT_FOUND');
+    // Check if category exists if provided
+    if (category_id) {
+      const [cat] = await db.query('SELECT id FROM categories WHERE id = $1', [category_id]);
+      if (cat.length === 0) {
+        throw new ApiError(404, `Category ID ${category_id} does not exist.`, 'CATEGORY_NOT_FOUND');
+      }
     }
 
     await db.query(
-      `UPDATE Products 
-       SET category_id = ?, product_name = ?, description = ?, price = ?, stock_quantity = ?, image_url = ?
-       WHERE product_id = ?`,
-      [category_id, product_name, description || null, price, stock_quantity, image_url || null, productId]
+      `UPDATE products 
+       SET category_id = COALESCE($1, category_id), 
+           name = COALESCE($2, name), 
+           description = COALESCE($3, description), 
+           price = COALESCE($4, price), 
+           stock = COALESCE($5, stock), 
+           image = COALESCE($6, image),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7`,
+      [category_id || null, prodName || null, description || null, price || null, prodStock || null, prodImage || null, productId]
     );
 
     const [updatedProduct] = await db.query(
-      `SELECT p.*, c.category_name 
-       FROM Products p 
-       JOIN Categories c ON p.category_id = c.category_id 
-       WHERE p.product_id = ?`,
+      `SELECT p.id, p.id AS product_id, p.name, p.name AS product_name, p.price, p.stock, p.stock AS stock_quantity, p.image, p.image AS image_url, c.name AS category_name
+       FROM products p 
+       JOIN categories c ON p.category_id = c.id 
+       WHERE p.id = $1`,
       [productId]
     );
 
@@ -216,7 +260,7 @@ const updateProduct = async (req, res, next) => {
   }
 };
 
-// DELETE /api/products/:id - Delete product
+// DELETE /api/products/:id - Delete product (Admin)
 const deleteProduct = async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id, 10);
@@ -224,27 +268,27 @@ const deleteProduct = async (req, res, next) => {
       throw new ApiError(400, 'Invalid product ID parameter.', 'INVALID_ID');
     }
 
-    const [existing] = await db.query('SELECT product_id, product_name FROM Products WHERE product_id = ?', [productId]);
+    const [existing] = await db.query('SELECT id, name FROM products WHERE id = $1', [productId]);
     if (existing.length === 0) {
       throw new ApiError(404, `Product with ID ${productId} not found.`, 'PRODUCT_NOT_FOUND');
     }
 
-    // Check if referenced in Order_Items
-    const [orderedItems] = await db.query('SELECT COUNT(*) as count FROM Order_Items WHERE product_id = ?', [productId]);
-    if (orderedItems[0].count > 0) {
+    // Check if referenced in order_items
+    const [orderedItems] = await db.query('SELECT COUNT(*) as count FROM order_items WHERE product_id = $1', [productId]);
+    if (parseInt(orderedItems[0]?.count || 0, 10) > 0) {
       throw new ApiError(
         409,
-        `Cannot delete product '${existing[0].product_name}' because it exists in ${orderedItems[0].count} historical order records. You may set its stock to 0 to prevent further purchases.`,
+        `Cannot delete product '${existing[0].name}' because it exists in historical order records. You may set its stock to 0 to prevent further purchases.`,
         'PRODUCT_IN_ORDERS'
       );
     }
 
-    await db.query('DELETE FROM Products WHERE product_id = ?', [productId]);
+    await db.query('DELETE FROM products WHERE id = $1', [productId]);
 
     return res.status(200).json({
       success: true,
-      data: { product_id: productId },
-      message: `Product '${existing[0].product_name}' deleted successfully.`
+      data: { product_id: productId, id: productId },
+      message: `Product '${existing[0].name}' deleted successfully.`
     });
   } catch (error) {
     next(error);

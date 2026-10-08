@@ -36,19 +36,15 @@ ClickCart is composed of two services:
 | `JWT_EXPIRES_IN` | Optional | `1d` | Token validity period. | `7d` |
 | `TAX_RATE` | Optional | `0.18` | Standard GST tax calculation rate (0.18 = 18%). | `0.18` |
 
-#### Database Variables (MySQL / Cloud Database)
+#### Database Variables (Supabase PostgreSQL)
 
-ClickCart features a **zero-crash dual engine**: if MySQL environment variables are omitted or unreachable, the server automatically boots with its **embedded production SQLite catalog**.
-
-To connect to a managed MySQL service (e.g., Aiven, PlanetScale, Railway, Supabase, TiDB):
+ClickCart connects directly to **Supabase hosted PostgreSQL** over SSL using connection pooling.
 
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
-| `DB_HOST` | Optional | `localhost` | Database host hostname or IP | `gateway01.us-east-1.prod.aws.tidbcloud.com` |
-| `DB_PORT` | Optional | `3306` | MySQL TCP port | `3306` |
-| `DB_USER` | Optional | `root` | Database username | `clickcart_user` |
-| `DB_PASSWORD` | Optional | `""` | Database user password | `SecretPass123!` |
-| `DB_NAME` | Optional | `ecommerce_db` | Database schema name | `ecommerce_db` |
+| `DATABASE_URL` | **Recommended** | Local Store | PostgreSQL URI connection string from your Supabase Dashboard. | `postgresql://postgres:[PASSWORD]@db.zvnihfslrdnvyujxyiov.supabase.co:5432/postgres` |
+
+> **Zero-Crash Local Engine:** If `DATABASE_URL` is omitted, ClickCart automatically initializes its built-in SQLite catalog for offline development.
 
 ---
 

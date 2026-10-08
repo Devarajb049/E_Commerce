@@ -1,5 +1,5 @@
 /**
- * Reports and Analytics Controller for ClickCart API
+ * Reports and Analytics Controller for ClickCart API (PostgreSQL / Supabase Ready)
  * Uses SQL aggregate functions: SUM, COUNT, GROUP BY, and Date functions
  */
 const db = require('../config/db');
@@ -11,46 +11,46 @@ const getSummary = async (req, res, next) => {
     const [salesResult] = await db.query(`
       SELECT 
         COUNT(*) AS total_orders,
-        COALESCE(SUM(CASE WHEN order_status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) AS total_sales,
-        COALESCE(SUM(CASE WHEN order_status = 'PLACED' OR order_status = 'PROCESSING' THEN 1 ELSE 0 END), 0) AS pending_orders
-      FROM Orders
+        COALESCE(SUM(CASE WHEN order_status NOT IN ('cancelled', 'CANCELLED') THEN total ELSE 0 END), 0) AS total_sales,
+        COALESCE(SUM(CASE WHEN order_status IN ('order_placed', 'processing', 'PLACED', 'PROCESSING') THEN 1 ELSE 0 END), 0) AS pending_orders
+      FROM orders
     `);
 
     // 2. Today's metrics
     const [todayResult] = await db.query(`
       SELECT 
         COUNT(*) AS today_orders,
-        COALESCE(SUM(CASE WHEN order_status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) AS today_sales
-      FROM Orders
-      WHERE DATE(created_at) = CURRENT_DATE()
+        COALESCE(SUM(CASE WHEN order_status NOT IN ('cancelled', 'CANCELLED') THEN total ELSE 0 END), 0) AS today_sales
+      FROM orders
+      WHERE DATE(created_at) = CURRENT_DATE
     `);
 
     // 3. Product catalog stats
     const [productResult] = await db.query(`
       SELECT 
         COUNT(*) AS total_products,
-        COALESCE(SUM(CASE WHEN stock_quantity <= 15 THEN 1 ELSE 0 END), 0) AS low_stock_products,
-        COALESCE(SUM(CASE WHEN stock_quantity = 0 THEN 1 ELSE 0 END), 0) AS out_of_stock_products
-      FROM Products
+        COALESCE(SUM(CASE WHEN stock <= 15 THEN 1 ELSE 0 END), 0) AS low_stock_products,
+        COALESCE(SUM(CASE WHEN stock = 0 THEN 1 ELSE 0 END), 0) AS out_of_stock_products
+      FROM products
     `);
 
     // 4. Category count
     const [categoryResult] = await db.query(`
-      SELECT COUNT(*) AS total_categories FROM Categories
+      SELECT COUNT(*) AS total_categories FROM categories
     `);
 
     return res.status(200).json({
       success: true,
       data: {
-        total_sales: parseFloat(salesResult[0].total_sales || 0),
-        total_orders: parseInt(salesResult[0].total_orders || 0, 10),
-        pending_orders: parseInt(salesResult[0].pending_orders || 0, 10),
-        today_sales: parseFloat(todayResult[0].today_sales || 0),
-        today_orders: parseInt(todayResult[0].today_orders || 0, 10),
-        total_products: parseInt(productResult[0].total_products || 0, 10),
-        low_stock_products: parseInt(productResult[0].low_stock_products || 0, 10),
-        out_of_stock_products: parseInt(productResult[0].out_of_stock_products || 0, 10),
-        total_categories: parseInt(categoryResult[0].total_categories || 0, 10)
+        total_sales: parseFloat(salesResult[0]?.total_sales || 0),
+        total_orders: parseInt(salesResult[0]?.total_orders || 0, 10),
+        pending_orders: parseInt(salesResult[0]?.pending_orders || 0, 10),
+        today_sales: parseFloat(todayResult[0]?.today_sales || 0),
+        today_orders: parseInt(todayResult[0]?.today_orders || 0, 10),
+        total_products: parseInt(productResult[0]?.total_products || 0, 10),
+        low_stock_products: parseInt(productResult[0]?.low_stock_products || 0, 10),
+        out_of_stock_products: parseInt(productResult[0]?.out_of_stock_products || 0, 10),
+        total_categories: parseInt(categoryResult[0]?.total_categories || 0, 10)
       },
       message: 'Dashboard analytics summary retrieved successfully.'
     });
@@ -64,17 +64,17 @@ const getSalesByCategory = async (req, res, next) => {
   try {
     const query = `
       SELECT 
-        c.category_id,
-        c.category_name,
-        COUNT(DISTINCT p.product_id) AS product_count,
+        c.id AS category_id,
+        c.name AS category_name,
+        COUNT(DISTINCT p.id) AS product_count,
         COALESCE(SUM(oi.quantity), 0) AS total_units_sold,
         COALESCE(SUM(oi.subtotal), 0) AS total_sales
-      FROM Categories c
-      LEFT JOIN Products p ON c.category_id = p.category_id
-      LEFT JOIN Order_Items oi ON p.product_id = oi.product_id
-      LEFT JOIN Orders o ON oi.order_id = o.order_id AND o.order_status != 'CANCELLED'
-      GROUP BY c.category_id, c.category_name
-      ORDER BY total_sales DESC, c.category_name ASC;
+      FROM categories c
+      LEFT JOIN products p ON c.id = p.category_id
+      LEFT JOIN order_items oi ON p.id = oi.product_id
+      LEFT JOIN orders o ON oi.order_id = o.id AND o.order_status NOT IN ('cancelled', 'CANCELLED')
+      GROUP BY c.id, c.name
+      ORDER BY total_sales DESC, c.name ASC;
     `;
     const [rows] = await db.query(query);
 
@@ -101,19 +101,19 @@ const getTopProducts = async (req, res, next) => {
   try {
     const query = `
       SELECT 
-        p.product_id,
-        p.product_name,
-        c.category_name,
+        p.id AS product_id,
+        p.name AS product_name,
+        c.name AS category_name,
         p.price,
-        p.stock_quantity,
-        p.image_url,
+        p.stock AS stock_quantity,
+        p.image AS image_url,
         COALESCE(SUM(oi.quantity), 0) AS total_quantity_sold,
         COALESCE(SUM(oi.subtotal), 0) AS total_revenue
-      FROM Products p
-      INNER JOIN Categories c ON p.category_id = c.category_id
-      LEFT JOIN Order_Items oi ON p.product_id = oi.product_id
-      LEFT JOIN Orders o ON oi.order_id = o.order_id AND o.order_status != 'CANCELLED'
-      GROUP BY p.product_id, p.product_name, c.category_name, p.price, p.stock_quantity, p.image_url
+      FROM products p
+      INNER JOIN categories c ON p.category_id = c.id
+      LEFT JOIN order_items oi ON p.id = oi.product_id
+      LEFT JOIN orders o ON oi.order_id = o.id AND o.order_status NOT IN ('cancelled', 'CANCELLED')
+      GROUP BY p.id, p.name, c.name, p.price, p.stock, p.image
       ORDER BY total_quantity_sold DESC, total_revenue DESC
       LIMIT 10;
     `;
@@ -146,12 +146,12 @@ const getDailySales = async (req, res, next) => {
     const query = `
       SELECT 
         DATE(created_at) AS sale_date,
-        COUNT(order_id) AS total_orders,
+        COUNT(id) AS total_orders,
         COALESCE(SUM(subtotal), 0) AS subtotal,
         COALESCE(SUM(tax), 0) AS total_tax,
-        COALESCE(SUM(total_amount), 0) AS total_sales
-      FROM Orders
-      WHERE order_status != 'CANCELLED'
+        COALESCE(SUM(total), 0) AS total_sales
+      FROM orders
+      WHERE order_status NOT IN ('cancelled', 'CANCELLED')
       GROUP BY DATE(created_at)
       ORDER BY sale_date DESC
       LIMIT 30;

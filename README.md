@@ -82,9 +82,9 @@ ClickCart features a bespoke **editorial retail visual language**:
 - **Framework:** Express.js (v4.21)
 - **Authentication:** JSON Web Tokens (JWT) & `bcryptjs` password hashing
 - **Static Serving:** Serves the compiled React SPA with HTML5 pushState routing for unified single-service deployments
-- **Database Layer:** Dual-engine architecture:
-  - **Primary:** MySQL 8.0+ via `mysql2/promise` with ACID connection pooling
-  - **Zero-Crash Fallback:** Embedded SQLite catalog auto-activates if MySQL is unreachable, preventing deployment downtime
+- **Database Layer:**
+  - **Primary:** Hosted **Supabase PostgreSQL 15+** via connection pooling (`pg`) with ACID transactions and row-level stock locks (`FOR UPDATE`)
+  - **Zero-Crash Fallback:** Embedded SQLite catalog auto-activates if `DATABASE_URL` is omitted, allowing offline development
 
 ---
 
