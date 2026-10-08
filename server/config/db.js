@@ -1,52 +1,48 @@
+/**
+ * Supabase PostgreSQL Database Connection Pool
+ * Built with 'pg' (node-postgres)
+ */
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
-const { querySqlite, getSqliteDb } = require('./sqliteStore');
+const path = require('path');
 
-dotenv.config();
+// Ensure environment variables are loaded
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config(); // fallback to root .env if present
 
-let pgPool = null;
-let useSqliteFallback = false;
+const connectionString = process.env.DATABASE_URL;
 
-const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
-
-if (connectionString) {
-  try {
-    const isSupabase = connectionString.includes('supabase.co') || connectionString.includes('pooler.supabase.com');
-    
-    pgPool = new Pool({
-      connectionString,
-      ssl: isSupabase || process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    });
-
-    // Test connection on boot
-    pgPool.query('SELECT 1 + 1 AS connection_test')
-      .then(() => {
-        console.log('✅ Successfully connected to Supabase PostgreSQL database.');
-      })
-      .catch((err) => {
-        console.warn(`⚠️ PostgreSQL connection warning (${err.message}). Active engine: embedded SQLite fallback.`);
-        useSqliteFallback = true;
-        getSqliteDb();
-      });
-  } catch (err) {
-    console.warn(`⚠️ Failed to initialize PostgreSQL pool (${err.message}). Falling back to SQLite.`);
-    useSqliteFallback = true;
-    getSqliteDb();
-  }
-} else {
-  console.log('ℹ️ No DATABASE_URL found in environment. Using embedded SQLite store.');
-  console.log('👉 To connect to Supabase: add DATABASE_URL=postgresql://postgres:[PASSWORD]@db.zvnihfslrdnvyujxyiov.supabase.co:5432/postgres in .env');
-  useSqliteFallback = true;
-  getSqliteDb();
+if (!connectionString) {
+  console.error('❌ FATAL: DATABASE_URL environment variable is missing.');
+  console.error('👉 Please configure DATABASE_URL in server/.env with your Supabase PostgreSQL connection string.');
 }
 
+// Configure PostgreSQL pool
+const pool = new Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Unexpected error on idle PostgreSQL client:', err.message);
+});
+
+// Test connection on boot
+pool.query('SELECT 1 + 1 AS connection_test')
+  .then(() => {
+    console.log('✅ Connected to Supabase PostgreSQL database.');
+  })
+  .catch((err) => {
+    console.error('❌ Failed to connect to Supabase PostgreSQL:', err.message);
+  });
+
 /**
- * Convert MySQL '?' placeholders to PostgreSQL '$1, $2, $3...' placeholders
+ * Convert MySQL '?' placeholders to PostgreSQL '$1, $2, $3...' positional parameters
  */
 function convertPlaceholders(sql) {
   let paramIndex = 1;
@@ -54,101 +50,58 @@ function convertPlaceholders(sql) {
 }
 
 const db = {
-  get isSqlite() {
-    return useSqliteFallback;
-  },
+  pool,
 
   get isPostgres() {
-    return !useSqliteFallback && Boolean(pgPool);
+    return true;
   },
 
   /**
-   * Execute parameterized query against PostgreSQL or fallback store
-   * Returns [rows, metadata] to maintain unified API across all controllers
+   * Execute parameterized query against Supabase PostgreSQL
+   * Returns [rows, resultMeta] to maintain consistent API across all controllers
    */
   async query(sql, params = []) {
-    if (!useSqliteFallback && pgPool) {
-      try {
+    const pgSql = convertPlaceholders(sql);
+    const res = await pool.query(pgSql, params);
+    const rows = res.rows || [];
+    const resultMeta = {
+      ...res,
+      insertId: rows[0]?.id || rows[0]?.product_id || rows[0]?.order_id || rows[0]?.category_id || rows[0]?.address_id || null,
+      affectedRows: res.rowCount,
+      rowCount: res.rowCount
+    };
+    return [rows, resultMeta];
+  },
+
+  /**
+   * Acquire a dedicated client from pool for atomic transactions (BEGIN/COMMIT/ROLLBACK)
+   */
+  async getConnection() {
+    const client = await pool.connect();
+    return {
+      async query(sql, params = []) {
         const pgSql = convertPlaceholders(sql);
-        const res = await pgPool.query(pgSql, params);
-        
-        // Synthesize insertId for INSERT statements with RETURNING
+        const res = await client.query(pgSql, params);
         const rows = res.rows || [];
         const resultMeta = {
           ...res,
-          insertId: rows[0]?.id || rows[0]?.product_id || rows[0]?.order_id || rows[0]?.category_id || rows[0]?.address_id || null,
+          insertId: rows[0]?.id || rows[0]?.product_id || rows[0]?.order_id || null,
           affectedRows: res.rowCount,
           rowCount: res.rowCount
         };
-
         return [rows, resultMeta];
-      } catch (err) {
-        if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
-          console.warn('⚠️ PostgreSQL connection lost. Falling back to SQLite store.');
-          useSqliteFallback = true;
-          return await querySqlite(sql, params);
-        }
-        throw err;
-      }
-    }
-
-    return await querySqlite(sql, params);
-  },
-
-  /**
-   * Acquire a dedicated client for atomic database transactions
-   */
-  async getConnection() {
-    if (!useSqliteFallback && pgPool) {
-      try {
-        const client = await pgPool.connect();
-        return {
-          async query(sql, params = []) {
-            const pgSql = convertPlaceholders(sql);
-            const res = await client.query(pgSql, params);
-            const rows = res.rows || [];
-            const resultMeta = {
-              ...res,
-              insertId: rows[0]?.id || rows[0]?.product_id || rows[0]?.order_id || null,
-              affectedRows: res.rowCount,
-              rowCount: res.rowCount
-            };
-            return [rows, resultMeta];
-          },
-          async beginTransaction() {
-            await client.query('BEGIN');
-          },
-          async commit() {
-            await client.query('COMMIT');
-          },
-          async rollback() {
-            await client.query('ROLLBACK');
-          },
-          release() {
-            client.release();
-          }
-        };
-      } catch (err) {
-        useSqliteFallback = true;
-      }
-    }
-
-    // Mock transaction connection for SQLite fallback
-    return {
-      async query(sql, params = []) {
-        return await querySqlite(sql, params);
       },
       async beginTransaction() {
-        return;
+        await client.query('BEGIN');
       },
       async commit() {
-        return;
+        await client.query('COMMIT');
       },
       async rollback() {
-        return;
+        await client.query('ROLLBACK');
       },
       release() {
-        return;
+        client.release();
       }
     };
   }

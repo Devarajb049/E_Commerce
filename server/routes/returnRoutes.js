@@ -51,6 +51,12 @@ router.post('/', authenticateToken, async (req, res, next) => {
       [orderId]
     );
 
+    await db.query(
+      `INSERT INTO order_status_history (order_id, status, note, changed_by)
+       VALUES ($1, 'Return Requested', $2, $3)`,
+      [orderId, `Return requested: ${reason.trim()}`, req.user?.email || 'CUSTOMER']
+    );
+
     const returnId = insertRows[0]?.id || meta.insertId;
 
     res.status(201).json({

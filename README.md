@@ -10,8 +10,8 @@
     <img src="https://img.shields.io/badge/Node.js-v18%2B-339933?logo=node.js" alt="Node.js"/>
     <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React 18"/>
     <img src="https://img.shields.io/badge/Vite-6-646CFF?logo=vite" alt="Vite"/>
-    <img src="https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwind-css" alt="Tailwind CSS"/>
-    <img src="https://img.shields.io/badge/MySQL-8.0%2B-4479A1?logo=mysql" alt="MySQL"/>
+    <img src="https://img.shields.io/badge/PostgreSQL-15%2B-4169E1?logo=postgresql" alt="PostgreSQL"/>
+    <img src="https://img.shields.io/badge/Supabase-Hosted-3ECF8E?logo=supabase" alt="Supabase"/>
     <img src="https://img.shields.io/badge/License-MIT-green" alt="License"/>
   </p>
 </div>
@@ -28,14 +28,14 @@
 
 ## ⚡ Quick Demo Accounts
 
-For evaluation, testing, and live demonstration, ClickCart provides pre-seeded demo accounts:
+For evaluation, testing, and live demonstration, ClickCart provides pre-seeded demo accounts in Supabase PostgreSQL:
 
 | Role | Email | Password | Features Accessible |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@clickcart.com` | `admin123` | Analytics dashboard, inventory management, order fulfillment, category control |
-| **Customer** | `customer@clickcart.com` | `password123` | Browsing, persistent cart, 4-step checkout, live order tracking, address book |
+| **Administrator** | `admin@clickcart.com` | `ClickCart@123` *(or `admin123`)* | Analytics dashboard, inventory management, order fulfillment, category control |
+| **Customer** | `customer@clickcart.com` | `Customer@123` *(or `password123`)* | Browsing, persistent cart, 4-step checkout, live order tracking, address book |
 
-> **Pro-Tip:** The `/login` page features a **"⚡ Continue as Demo Admin"** one-tap button that logs in directly via the JWT API without typing.
+> **Pro-Tip:** The `/login` page features one-tap buttons: **"⚡ Continue as Demo Admin"** and **"⚡ Continue as Demo Customer"** that authenticate directly via the real JWT API.
 
 ---
 
@@ -82,9 +82,7 @@ ClickCart features a bespoke **editorial retail visual language**:
 - **Framework:** Express.js (v4.21)
 - **Authentication:** JSON Web Tokens (JWT) & `bcryptjs` password hashing
 - **Static Serving:** Serves the compiled React SPA with HTML5 pushState routing for unified single-service deployments
-- **Database Layer:**
-  - **Primary:** Hosted **Supabase PostgreSQL 15+** via connection pooling (`pg`) with ACID transactions and row-level stock locks (`FOR UPDATE`)
-  - **Zero-Crash Fallback:** Embedded SQLite catalog auto-activates if `DATABASE_URL` is omitted, allowing offline development
+- **Database Layer:** Hosted **Supabase PostgreSQL 15+** via connection pooling (`pg`) with strict ACID transactions, row-level locking (`FOR UPDATE`), and automated order status history tracking.
 
 ---
 

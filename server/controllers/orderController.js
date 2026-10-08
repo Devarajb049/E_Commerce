@@ -137,7 +137,14 @@ const createOrder = async (req, res, next) => {
       );
     }
 
-    // 3. If authenticated user has active carts, clear their cart items
+    // 3. Create initial order_status_history record
+    await connection.query(
+      `INSERT INTO order_status_history (order_id, status, note, changed_by)
+       VALUES ($1, $2, $3, $4)`,
+      [orderId, 'Order Placed', 'Order placed successfully by customer', customer.name.trim()]
+    );
+
+    // 4. If authenticated user has active carts, clear their cart items
     if (authUserId) {
       try {
         await connection.query(
@@ -431,11 +438,22 @@ const getOrderById = async (req, res, next) => {
       [order.id]
     );
 
+    // Fetch order status history
+    const [historyRows] = await db.query(
+      `SELECT id, order_id, status, note, changed_by, created_at
+       FROM order_status_history
+       WHERE order_id = $1
+       ORDER BY created_at ASC`,
+      [order.id]
+    );
+
     return res.status(200).json({
       success: true,
       data: {
         ...order,
-        items: itemRows
+        items: itemRows,
+        status_history: historyRows,
+        history: historyRows
       },
       message: 'Order details retrieved successfully.'
     });
@@ -458,15 +476,18 @@ const updateOrderStatus = async (req, res, next) => {
 
     const validStatuses = [
       'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded',
-      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'
+      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED',
+      'Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded'
     ];
-    if (!status || !validStatuses.includes(status)) {
+    const matchedStatus = validStatuses.find(s => s.toLowerCase().replace(/[\s_]/g, '') === String(status || '').trim().toLowerCase().replace(/[\s_]/g, ''));
+    if (!matchedStatus) {
       throw new ApiError(
         422,
-        `Invalid status '${status}'. Must be one of: order_placed, processing, shipped, delivered, cancelled`,
+        `Invalid status '${status}'. Must be one of: Order Placed, Processing, Shipped, Out for Delivery, Delivered, Cancelled, Returned`,
         'INVALID_STATUS'
       );
     }
+    const targetStatus = matchedStatus;
 
     const [existing] = await db.query('SELECT id, order_status FROM orders WHERE id = $1', [orderId]);
     if (existing.length === 0) {
@@ -487,14 +508,21 @@ const updateOrderStatus = async (req, res, next) => {
       }
     }
 
-    await db.query('UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [status, orderId]);
+    await db.query('UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetStatus, orderId]);
+
+    // Record transition in order_status_history
+    await db.query(
+      `INSERT INTO order_status_history (order_id, status, note, changed_by)
+       VALUES ($1, $2, $3, $4)`,
+      [orderId, targetStatus, req.body.note || `Status updated to ${targetStatus}`, req.user?.email || 'ADMIN']
+    );
 
     const [updated] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
 
     return res.status(200).json({
       success: true,
       data: updated[0],
-      message: `Order status updated to '${status}'.`
+      message: `Order status updated to '${targetStatus}'.`
     });
   } catch (error) {
     next(error);
@@ -548,6 +576,13 @@ const cancelOrder = async (req, res, next) => {
     }
 
     await db.query("UPDATE orders SET order_status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [orderId]);
+
+    // Record cancellation in order_status_history
+    await db.query(
+      `INSERT INTO order_status_history (order_id, status, note, changed_by)
+       VALUES ($1, $2, $3, $4)`,
+      [orderId, 'Cancelled', 'Cancelled by customer', req.user?.email || 'CUSTOMER']
+    );
 
     return res.status(200).json({
       success: true,
