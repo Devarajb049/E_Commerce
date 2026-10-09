@@ -87,7 +87,7 @@ const ClickCartFooter = () => {
             lineHeight: 0.92,
           }}
         >
-          CLICKCART
+          CLICKKART
         </div>
 
         {/* Layer 2: Main Footer Content (z-index: 2) */}
@@ -96,7 +96,7 @@ const ClickCartFooter = () => {
           {/* Section: Main Headline */}
           <div className="mb-10 sm:mb-12">
             <h2 className="text-4xl sm:text-6xl md:text-7xl lg:text-[84px] xl:text-[96px] font-extrabold tracking-[-0.04em] text-[#111827] leading-[0.98] select-none text-center">
-              Let&apos;s <span className="text-[#4F46E5]">Shop Smarter</span>
+              Let&apos;s <span className="text-[#4F46E5]">Shop in a Click</span>
             </h2>
           </div>
 
@@ -145,7 +145,7 @@ const ClickCartFooter = () => {
           {/* Section: Centered Copyright */}
           <div className="pt-4 pb-2 text-center">
             <p className="text-xs sm:text-sm font-semibold text-[#64748B] tracking-[0.1em] uppercase">
-              &copy; {currentYear} CLICKCART. ALL RIGHTS RESERVED.
+              &copy; {currentYear} CLICKKART • SHOP IN A CLICK. ALL RIGHTS RESERVED.
             </p>
           </div>
 

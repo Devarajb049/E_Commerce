@@ -38,9 +38,21 @@ async function seedUsers() {
       ['Demo Customer', 'customer@clickcart.com', customerPasswordHash]
     );
 
+    // Idempotently insert/update Customer B account in PostgreSQL for multi-customer testing
+    await db.query(
+      `INSERT INTO users (full_name, email, password_hash, role)
+       VALUES ($1, $2, $3, 'customer')
+       ON CONFLICT (email) DO UPDATE SET
+         full_name = EXCLUDED.full_name,
+         password_hash = EXCLUDED.password_hash,
+         role = 'customer'`,
+      ['Customer B', 'customer2@clickcart.com', customerPasswordHash]
+    );
+
     console.log('✅ Demo accounts verified & seeded successfully:');
-    console.log('   - Admin:    admin@clickcart.com (Role: admin)');
-    console.log('   - Customer: customer@clickcart.com (Role: customer)');
+    console.log('   - Admin:      admin@clickcart.com (Role: admin)');
+    console.log('   - Customer A: customer@clickcart.com (Role: customer)');
+    console.log('   - Customer B: customer2@clickcart.com (Role: customer)');
     return true;
   } catch (error) {
     console.warn('⚠️ Non-blocking users seeding notice:', error.message);

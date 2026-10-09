@@ -9,7 +9,7 @@
     "start": "node server/server.js",
     "server": "node server/server.js",
     "client": "npm --prefix client run dev",
-    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm --prefix server run start\" \"npm --prefix client run dev\"",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
     "seed": "npm --prefix server run seed"
   },
   "devDependencies": {

@@ -9,11 +9,14 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import EmptyState from './components/EmptyState';
 import ProtectedRoute from './components/ProtectedRoute';
+import ScrollToTop from './components/common/ScrollToTop';
 
 // Pages
 import Home from './pages/Home';
 import Products from './pages/Products';
 import ProductDetails from './pages/ProductDetails';
+import CategoriesPage from './pages/CategoriesPage';
+import SuperSale from './pages/SuperSale';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
@@ -56,11 +59,46 @@ function AppContent() {
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
+          <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/categories/:id" element={<Products />} />
+          <Route path="/super-sale" element={<SuperSale />} />
           <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/order-success/:orderId" element={<OrderSuccess />} />
-          <Route path="/invoice/:id" element={<Invoice />} />
-          <Route path="/orders" element={<Orders />} />
+
+          {/* Protected Customer Routes (Rules #5 & #8) */}
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute>
+                <Checkout />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/order-success/:orderId"
+            element={
+              <ProtectedRoute>
+                <OrderSuccess />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoice/:id"
+            element={
+              <ProtectedRoute>
+                <Invoice />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
@@ -132,6 +170,7 @@ function App() {
       <AuthProvider>
         <CartProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <AppContent />
           </BrowserRouter>
         </CartProvider>

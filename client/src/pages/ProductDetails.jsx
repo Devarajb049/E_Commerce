@@ -67,12 +67,10 @@ const ProductDetails = () => {
   const cartItem = items.find((i) => i.product_id === product.product_id);
   const currentCartQty = cartItem ? cartItem.quantity : 0;
 
-  // Multi-image gallery list (fallback to product image and curated perspectives)
-  const galleryImages = [
-    product.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80',
-    'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=800&q=80',
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'
-  ];
+  // Image gallery: Only show multiple images if they actually belong to this product
+  const galleryImages = Array.isArray(product.images) && product.images.length > 0
+    ? product.images
+    : [product.image_url || product.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80'];
 
   const handleQuantityChange = (delta) => {
     setQuantity((prev) => {
@@ -165,28 +163,30 @@ const ProductDetails = () => {
             </div>
           </div>
 
-          {/* Thumbnail Selection Strip (Rule #27) */}
-          <div className="flex items-center gap-2.5">
-            {galleryImages.map((img, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setSelectedImageIndex(idx)}
-                className={`relative w-16 h-16 rounded-[8px] overflow-hidden border-2 transition-all duration-fast ${
-                  selectedImageIndex === idx
-                    ? 'border-brand-indigo ring-2 ring-indigo-50 shadow-subtle'
-                    : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
-                }`}
-                aria-label={`Select product image view ${idx + 1}`}
-              >
-                <img 
-                  src={img} 
-                  alt={`Thumbnail ${idx + 1}`} 
-                  className="w-full h-full object-cover" 
-                />
-              </button>
-            ))}
-          </div>
+          {/* Thumbnail Selection Strip (Only rendered when product genuinely has multiple images) */}
+          {galleryImages.length > 1 && (
+            <div className="flex items-center gap-2.5">
+              {galleryImages.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(idx)}
+                  className={`relative w-16 h-16 rounded-[8px] overflow-hidden border-2 transition-all duration-fast ${
+                    selectedImageIndex === idx
+                      ? 'border-brand-indigo ring-2 ring-indigo-50 shadow-subtle'
+                      : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
+                  }`}
+                  aria-label={`Select product image view ${idx + 1}`}
+                >
+                  <img 
+                    src={img} 
+                    alt={`Thumbnail ${idx + 1}`} 
+                    className="w-full h-full object-cover" 
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* RIGHT: PRODUCT INFORMATION & PURCHASE FORM */}
@@ -280,7 +280,7 @@ const ProductDetails = () => {
                 ) : justAdded ? (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Added ✓</span>
+                    <span>Added</span>
                   </>
                 ) : (
                   <>

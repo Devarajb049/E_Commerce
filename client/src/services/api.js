@@ -56,9 +56,19 @@ export const api = {
   updateCategory: (id, data) => apiClient.put(`/categories/${id}`, data),
   deleteCategory: (id) => apiClient.delete(`/categories/${id}`),
 
+  // Cart (Protected server-side cart & merge API)
+  getCart: () => apiClient.get('/cart'),
+  addToCart: (productId, quantity = 1) => apiClient.post('/cart', { productId, quantity }),
+  updateCartItem: (id, quantity) => apiClient.put(`/cart/${id}`, { quantity }),
+  removeCartItem: (id) => apiClient.delete(`/cart/${id}`),
+  clearCart: () => apiClient.delete('/cart'),
+  mergeCart: (items) => apiClient.post('/cart/merge', { items }),
+
   // Products
   getProducts: (params = {}) => apiClient.get('/products', { params }),
   getProduct: (id) => apiClient.get(`/products/${id}`),
+  getSaleProducts: () => apiClient.get('/products', { params: { sale: 'true' } }),
+  getFeaturedProducts: () => apiClient.get('/products', { params: { featured: 'true' } }),
   createProduct: (data) => apiClient.post('/products', data),
   updateProduct: (id, data) => apiClient.put(`/products/${id}`, data),
   deleteProduct: (id) => apiClient.delete(`/products/${id}`),

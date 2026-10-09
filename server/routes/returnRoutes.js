@@ -19,14 +19,14 @@ router.post('/', authenticateToken, async (req, res, next) => {
     }
 
     const [orderRows] = await db.query(
-      'SELECT id, total, order_status FROM orders WHERE id = $1 AND (user_id = $2 OR email = $3)',
-      [orderId, userId, req.user.email]
+      'SELECT id, total, order_status FROM orders WHERE (id::text = $1 OR order_number = $1) AND user_id = $2',
+      [String(orderId), userId]
     );
 
     if (!orderRows || orderRows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found or does not belong to your account.'
+        message: 'Order not found.'
       });
     }
 
@@ -43,18 +43,18 @@ router.post('/', authenticateToken, async (req, res, next) => {
       `INSERT INTO order_returns (order_id, user_id, product_id, reason, status, refund_amount)
        VALUES ($1, $2, $3, $4, 'REQUESTED', $5)
        RETURNING *`,
-      [orderId, userId, productId || null, reason.trim(), order.total]
+      [order.id, userId, productId || null, reason.trim(), order.total]
     );
 
     await db.query(
-      "UPDATE orders SET order_status = 'RETURN_REQUESTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [orderId]
+      "UPDATE orders SET order_status = 'Return Requested', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [order.id]
     );
 
     await db.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, 'Return Requested', $2, $3)`,
-      [orderId, `Return requested: ${reason.trim()}`, req.user?.email || 'CUSTOMER']
+      [order.id, `Return requested: ${reason.trim()}`, req.user?.email || 'CUSTOMER']
     );
 
     const returnId = insertRows[0]?.id || meta.insertId;
@@ -136,13 +136,30 @@ router.put('/:id/status', authenticateToken, requireAdmin, async (req, res, next
       [status, adminNotes || '', returnId]
     );
 
-    // If completed, update order to RETURNED and payment_status to REFUNDED
+    // If completed, update order to RETURNED and payment_status to REFUNDED, restoring eligible inventory once
     if (status === 'COMPLETED') {
-      const [retRows] = await db.query('SELECT order_id FROM order_returns WHERE id = $1', [returnId]);
+      const [retRows] = await db.query('SELECT order_id, product_id, restocked FROM order_returns WHERE id = $1', [returnId]);
       if (retRows.length > 0) {
+        const ret = retRows[0];
+        if (!ret.restocked) {
+          if (ret.product_id) {
+            await db.query('UPDATE products SET stock = stock + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [ret.product_id]);
+          } else {
+            const [items] = await db.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [ret.order_id]);
+            for (const item of items) {
+              await db.query('UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [item.quantity, item.product_id]);
+            }
+          }
+          await db.query('UPDATE order_returns SET restocked = TRUE WHERE id = $1', [returnId]);
+        }
         await db.query(
-          "UPDATE orders SET order_status = 'RETURNED', payment_status = 'REFUNDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-          [retRows[0].order_id]
+          "UPDATE orders SET order_status = 'Returned', payment_status = 'REFUNDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+          [ret.order_id]
+        );
+        await db.query(
+          `INSERT INTO order_status_history (order_id, status, note, changed_by)
+           VALUES ($1, 'Returned', 'Return completed and inventory restocked', $2)`,
+          [ret.order_id, req.user?.email || 'ADMIN']
         );
       }
     }

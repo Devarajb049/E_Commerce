@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Filter, SlidersHorizontal, ArrowUpDown, X, Grid, Layers } from 'lucide-react';
+import { useSearchParams, useParams, Link } from 'react-router-dom';
+import { Filter, SlidersHorizontal, ArrowUpDown, X, Grid, Layers, Package } from 'lucide-react';
 import api from '../services/api';
 import ProductCard from '../components/ProductCard';
 import CategoryCard from '../components/CategoryCard';
@@ -11,6 +11,7 @@ import ErrorMessage from '../components/ErrorMessage';
 
 const Products = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { id: routeCategoryId } = useParams();
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -19,7 +20,7 @@ const Products = () => {
 
   // Filters state from URL or defaults
   const search = searchParams.get('search') || '';
-  const selectedCategory = searchParams.get('category') || 'all';
+  const selectedCategory = routeCategoryId || searchParams.get('category') || searchParams.get('categoryId') || 'all';
   const sort = searchParams.get('sort') || 'default';
   const minPrice = searchParams.get('min_price') || '';
   const maxPrice = searchParams.get('max_price') || '';
@@ -89,19 +90,44 @@ const Products = () => {
     search || (selectedCategory && selectedCategory !== 'all') || minPrice || maxPrice || inStockOnly || (sort && sort !== 'default')
   );
 
+  const activeCategoryObj = categories.find(
+    (c) =>
+      String(c.id) === String(selectedCategory) ||
+      String(c.slug).toLowerCase() === String(selectedCategory).toLowerCase() ||
+      c.name?.toLowerCase() === String(selectedCategory).toLowerCase()
+  );
+
+  useEffect(() => {
+    if (activeCategoryObj) {
+      document.title = `${activeCategoryObj.name || activeCategoryObj.category_name} | ClickKart`;
+    } else if (search) {
+      document.title = `Search: ${search} | ClickKart`;
+    } else {
+      document.title = 'Products | ClickKart';
+    }
+  }, [activeCategoryObj, search]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-      
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-brand-border gap-4">
         <div>
           <h1 className="text-2xl font-bold text-brand-dark tracking-tight">
-            {viewMode === 'categories' ? 'Departments' : 'Product Catalog'}
+            {viewMode === 'categories'
+              ? 'Departments'
+              : activeCategoryObj
+              ? (activeCategoryObj.name || activeCategoryObj.category_name)
+              : search
+              ? `Search Results for "${search}"`
+              : 'Product Catalog'}
           </h1>
           <p className="text-xs text-brand-muted mt-0.5">
             {viewMode === 'categories'
               ? `Browse all ${categories.length} store departments.`
-              : `Showing ${products.length} products available for order.`}
+              : activeCategoryObj
+              ? (activeCategoryObj.description || `Showing ${products.length} authentic products in ${activeCategoryObj.name}.`)
+              : `Find products from ${categories.length} departments (${products.length} items available).`}
           </p>
         </div>
 
@@ -109,22 +135,20 @@ const Products = () => {
         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-btn self-start sm:self-auto">
           <button
             onClick={() => updateParam('view', 'products')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-semibold transition-all ${
-              viewMode !== 'categories'
-                ? 'bg-white text-brand-indigo shadow-subtle'
-                : 'text-gray-600 hover:text-brand-dark'
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-semibold transition-all ${viewMode !== 'categories'
+              ? 'bg-white text-brand-indigo shadow-subtle'
+              : 'text-gray-600 hover:text-brand-dark'
+              }`}
           >
             <Grid className="w-3.5 h-3.5" />
             <span>Products</span>
           </button>
           <button
             onClick={() => updateParam('view', 'categories')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-semibold transition-all ${
-              viewMode === 'categories'
-                ? 'bg-white text-brand-indigo shadow-subtle'
-                : 'text-gray-600 hover:text-brand-dark'
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-semibold transition-all ${viewMode === 'categories'
+              ? 'bg-white text-brand-indigo shadow-subtle'
+              : 'text-gray-600 hover:text-brand-dark'
+              }`}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Categories ({categories.length})</span>
@@ -140,7 +164,7 @@ const Products = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
-          
+
           {/* DESKTOP SIDEBAR FILTERS (3 Cols) */}
           <aside className="hidden lg:block lg:col-span-3 bg-white border border-brand-border rounded-card p-5 space-y-5 shadow-subtle sticky top-20">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -166,11 +190,10 @@ const Products = () => {
               <div className="space-y-0.5 max-h-56 overflow-y-auto pr-1">
                 <button
                   onClick={() => updateParam('category', 'all')}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-btn text-xs font-medium transition-colors ${
-                    selectedCategory === 'all'
-                      ? 'bg-indigo-50 text-brand-indigo font-bold'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-btn text-xs font-medium transition-colors ${selectedCategory === 'all'
+                    ? 'bg-indigo-50 text-brand-indigo font-bold'
+                    : 'text-gray-600 hover:bg-gray-50'
+                    }`}
                 >
                   All Categories
                 </button>
@@ -178,11 +201,10 @@ const Products = () => {
                   <button
                     key={cat.category_id}
                     onClick={() => updateParam('category', cat.category_id.toString())}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-btn text-xs font-medium transition-colors flex justify-between items-center ${
-                      selectedCategory === cat.category_id.toString()
-                        ? 'bg-indigo-50 text-brand-indigo font-bold'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-btn text-xs font-medium transition-colors flex justify-between items-center ${selectedCategory === cat.category_id.toString()
+                      ? 'bg-indigo-50 text-brand-indigo font-bold'
+                      : 'text-gray-600 hover:bg-gray-50'
+                      }`}
                   >
                     <span className="truncate">{cat.category_name}</span>
                     <span className="text-[10px] text-gray-400">({cat.product_count})</span>
@@ -231,7 +253,7 @@ const Products = () => {
 
           {/* MAIN PRODUCT CATALOG (9 Cols) */}
           <main className="lg:col-span-9 space-y-5">
-            
+
             {/* Search and Sort Toolbar */}
             <div className="bg-white border border-brand-border rounded-card p-3 sm:p-4 shadow-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="flex-1">

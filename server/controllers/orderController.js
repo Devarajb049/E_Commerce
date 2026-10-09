@@ -131,10 +131,19 @@ const createOrder = async (req, res, next) => {
         [orderId, item.product_id, item.product_name, item.price, item.quantity, item.subtotal]
       );
 
-      await connection.query(
-        'UPDATE products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND stock >= $1',
+      const [stockUpdateRows, stockMeta] = await connection.query(
+        'UPDATE products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND stock >= $1 RETURNING id, stock',
         [item.quantity, item.product_id]
       );
+
+      if (!stockUpdateRows || stockUpdateRows.length === 0) {
+        await connection.rollback();
+        throw new ApiError(
+          400,
+          `Inventory for '${item.product_name}' became insufficient during purchase. Order could not be completed.`,
+          'INSUFFICIENT_STOCK'
+        );
+      }
     }
 
     // 3. Create initial order_status_history record
@@ -339,11 +348,15 @@ const getMyOrders = async (req, res, next) => {
 
 /**
  * GET /api/orders/:id - Get complete order details with item list and invoice data
+ * Enforces strict user isolation: customer only accesses own order, admin accesses any.
+ * Returns 404 Not Found if inaccessible.
  */
 const getOrderById = async (req, res, next) => {
   try {
     const orderIdentifier = req.params.id;
     const currentUser = req.user;
+    const currentUserId = currentUser.id || currentUser.userId;
+    const isAdmin = currentUser.role === 'admin';
 
     let orderSql = `
       SELECT 
@@ -359,6 +372,7 @@ const getOrderById = async (req, res, next) => {
         o.shipping_city AS city,
         o.shipping_state AS state,
         o.shipping_postal_code AS pincode,
+        o.shipping_country,
         o.subtotal,
         o.tax,
         o.shipping_fee,
@@ -368,52 +382,29 @@ const getOrderById = async (req, res, next) => {
         o.order_status,
         o.payment_method,
         o.payment_status,
-        o.created_at
+        o.estimated_delivery_date,
+        o.created_at,
+        o.updated_at
       FROM orders o
       WHERE 
     `;
     const params = [];
 
-    const isNumeric = /^\d+$/.test(orderIdentifier);
-    if (isNumeric) {
-      orderSql += '(o.id = $1 OR o.order_number = $2)';
-      params.push(parseInt(orderIdentifier, 10), orderIdentifier);
-    } else {
-      orderSql += 'o.order_number = $1';
+    if (isAdmin) {
+      orderSql += '(o.id::text = $1 OR o.order_number = $1)';
       params.push(orderIdentifier);
+    } else {
+      orderSql += '(o.id::text = $1 OR o.order_number = $1) AND o.user_id = $2';
+      params.push(orderIdentifier, currentUserId);
     }
 
     const [orderRows] = await db.query(orderSql, params);
 
     if (orderRows.length === 0) {
-      throw new ApiError(404, `Order '${orderIdentifier}' not found.`, 'ORDER_NOT_FOUND');
+      throw new ApiError(404, 'Order not found.', 'ORDER_NOT_FOUND');
     }
 
     const order = orderRows[0];
-
-    // IAM Access Control: Check ownership if user is not admin
-    if (currentUser) {
-      if (currentUser.role !== 'admin') {
-        const orderUserId = order.user_id;
-        const currentUserId = currentUser.id || currentUser.userId;
-        const matchesUser = orderUserId && parseInt(orderUserId, 10) === parseInt(currentUserId, 10);
-        const matchesEmail = !orderUserId && order.email && order.email.toLowerCase() === currentUser.email.toLowerCase();
-
-        if (!matchesUser && !matchesEmail) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access restricted. You do not have permission to view this order.',
-            error: 'FORBIDDEN'
-          });
-        }
-      }
-    } else {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required to access order details.',
-        error: 'UNAUTHORIZED'
-      });
-    }
 
     // Fetch order items with snapshot prices & current product info
     const [itemRows] = await db.query(
@@ -463,59 +454,195 @@ const getOrderById = async (req, res, next) => {
 };
 
 /**
+ * GET /api/orders/:id/track - Live tracking data with status history, delivery estimate & current stage
+ */
+const trackOrder = async (req, res, next) => {
+  try {
+    const orderIdentifier = req.params.id;
+    const currentUser = req.user;
+    const currentUserId = currentUser.id || currentUser.userId;
+    const isAdmin = currentUser.role === 'admin';
+
+    let orderSql = `
+      SELECT 
+        o.id,
+        o.id AS order_id,
+        o.order_number,
+        o.user_id,
+        o.shipping_full_name AS customer_name,
+        o.shipping_full_name,
+        o.email,
+        o.shipping_phone AS phone,
+        o.shipping_address AS address,
+        o.shipping_city AS city,
+        o.shipping_state AS state,
+        o.shipping_postal_code AS pincode,
+        o.shipping_country,
+        o.subtotal,
+        o.tax,
+        o.shipping_fee,
+        o.discount,
+        o.total AS total_amount,
+        o.total,
+        o.order_status,
+        o.payment_method,
+        o.payment_status,
+        o.estimated_delivery_date,
+        o.created_at,
+        o.updated_at
+      FROM orders o
+      WHERE 
+    `;
+    const params = [];
+
+    if (isAdmin) {
+      orderSql += '(o.id::text = $1 OR o.order_number = $1)';
+      params.push(orderIdentifier);
+    } else {
+      orderSql += '(o.id::text = $1 OR o.order_number = $1) AND o.user_id = $2';
+      params.push(orderIdentifier, currentUserId);
+    }
+
+    const [orderRows] = await db.query(orderSql, params);
+
+    if (orderRows.length === 0) {
+      throw new ApiError(404, 'Order not found.', 'ORDER_NOT_FOUND');
+    }
+
+    const order = orderRows[0];
+
+    // Fetch order line items
+    const [itemRows] = await db.query(
+      `SELECT 
+         oi.id,
+         oi.id AS order_item_id,
+         oi.order_id,
+         oi.product_id,
+         oi.quantity,
+         oi.product_price AS price,
+         oi.product_price,
+         oi.subtotal,
+         oi.product_name,
+         p.image AS image_url,
+         p.image,
+         c.name AS category_name
+       FROM order_items oi
+       LEFT JOIN products p ON oi.product_id = p.id
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE oi.order_id = $1
+       ORDER BY oi.id ASC`,
+      [order.id]
+    );
+
+    // Fetch real chronological history events from database
+    const [historyRows] = await db.query(
+      `SELECT id, order_id, status, note, changed_by, created_at
+       FROM order_status_history
+       WHERE order_id = $1
+       ORDER BY created_at ASC`,
+      [order.id]
+    );
+
+    const latestHistory = historyRows.length > 0 ? historyRows[historyRows.length - 1] : null;
+    const latestTimestamp = latestHistory ? latestHistory.created_at : (order.updated_at || order.created_at);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...order,
+        items: itemRows,
+        status_history: historyRows,
+        history: historyRows,
+        latest_status_timestamp: latestTimestamp,
+        last_updated: latestTimestamp
+      },
+      message: 'Order tracking retrieved successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PUT /api/orders/:id/status - Update order fulfillment status (Administrator only)
  */
 const updateOrderStatus = async (req, res, next) => {
+  let connection;
   try {
     const orderId = parseInt(req.params.id, 10);
-    const { status } = req.body;
+    const { status, note } = req.body;
 
     if (isNaN(orderId)) {
       throw new ApiError(400, 'Invalid order ID parameter.', 'INVALID_ID');
     }
 
     const validStatuses = [
+      'Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded',
       'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded',
-      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED',
-      'Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded'
+      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'
     ];
-    const matchedStatus = validStatuses.find(s => s.toLowerCase().replace(/[\s_]/g, '') === String(status || '').trim().toLowerCase().replace(/[\s_]/g, ''));
+
+    const matchedStatus = validStatuses.find(
+      (s) => s.toLowerCase().replace(/[\s_]/g, '') === String(status || '').trim().toLowerCase().replace(/[\s_]/g, '')
+    );
+
     if (!matchedStatus) {
       throw new ApiError(
         422,
-        `Invalid status '${status}'. Must be one of: Order Placed, Processing, Shipped, Out for Delivery, Delivered, Cancelled, Returned`,
+        `Invalid status '${status}'. Must be one of: Order Placed, Processing, Shipped, Out for Delivery, Delivered, Cancelled, Returned, Refunded`,
         'INVALID_STATUS'
       );
     }
-    const targetStatus = matchedStatus;
 
-    const [existing] = await db.query('SELECT id, order_status FROM orders WHERE id = $1', [orderId]);
+    // Standardize to clean display title
+    let targetStatus = 'Processing';
+    const cleanLower = String(status).trim().toLowerCase().replace(/[\s_]/g, '');
+    if (cleanLower === 'orderplaced' || cleanLower === 'placed') targetStatus = 'Order Placed';
+    else if (cleanLower === 'processing') targetStatus = 'Processing';
+    else if (cleanLower === 'shipped') targetStatus = 'Shipped';
+    else if (cleanLower === 'outfordelivery') targetStatus = 'Out for Delivery';
+    else if (cleanLower === 'delivered') targetStatus = 'Delivered';
+    else if (cleanLower === 'cancelled') targetStatus = 'Cancelled';
+    else if (cleanLower === 'returned' || cleanLower === 'returnrequested') targetStatus = 'Returned';
+    else if (cleanLower === 'refunded') targetStatus = 'Refunded';
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [existing] = await connection.query('SELECT id, order_status FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (existing.length === 0) {
+      await connection.rollback();
       throw new ApiError(404, `Order ID ${orderId} not found.`, 'ORDER_NOT_FOUND');
     }
 
-    const isCancelling = status.toUpperCase() === 'CANCELLED' || status.toLowerCase() === 'cancelled';
-    const wasCancelled = existing[0].order_status.toUpperCase() === 'CANCELLED' || existing[0].order_status.toLowerCase() === 'cancelled';
+    const currentStatus = (existing[0].order_status || '').toLowerCase();
+    const isCancelling = targetStatus === 'Cancelled';
+    const wasCancelled = currentStatus === 'cancelled';
 
-    // If transitioning to CANCELLED from an active state, restore product stock
+    // If transitioning to Cancelled from an active state, restore product stock safely
     if (isCancelling && !wasCancelled) {
-      const [items] = await db.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      const [items] = await connection.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of items) {
-        await db.query(
+        await connection.query(
           'UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [item.quantity, item.product_id]
         );
       }
     }
 
-    await db.query('UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetStatus, orderId]);
+    await connection.query(
+      'UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [targetStatus, orderId]
+    );
 
     // Record transition in order_status_history
-    await db.query(
+    await connection.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, $2, $3, $4)`,
-      [orderId, targetStatus, req.body.note || `Status updated to ${targetStatus}`, req.user?.email || 'ADMIN']
+      [orderId, targetStatus, note || `Status updated to ${targetStatus}`, req.user?.email || 'ADMIN']
     );
+
+    await connection.commit();
 
     const [updated] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
 
@@ -525,40 +652,59 @@ const updateOrderStatus = async (req, res, next) => {
       message: `Order status updated to '${targetStatus}'.`
     });
   } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rErr) {}
+    }
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 };
 
 /**
- * PUT /api/orders/:id/cancel - Customer self-cancellation if order is still PLACED
+ * PUT /api/orders/:id/cancel - Customer self-cancellation if order is still in Order Placed status
  */
 const cancelOrder = async (req, res, next) => {
+  let connection;
   try {
-    const orderId = parseInt(req.params.id, 10);
+    const orderIdentifier = req.params.id;
     const currentUserId = req.user?.id || req.user?.userId;
+    const isAdmin = req.user?.role === 'admin';
 
-    if (isNaN(orderId)) {
-      throw new ApiError(400, 'Invalid order ID parameter.', 'INVALID_ID');
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    let checkSql = 'SELECT id, order_number, user_id, order_status FROM orders WHERE (id::text = $1 OR order_number = $1)';
+    const checkParams = [orderIdentifier];
+
+    if (!isAdmin) {
+      checkSql += ' AND user_id = $2';
+      checkParams.push(currentUserId);
     }
+    checkSql += ' FOR UPDATE';
 
-    const [existing] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    const [existing] = await connection.query(checkSql, checkParams);
     if (existing.length === 0) {
-      throw new ApiError(404, `Order ID ${orderId} not found.`, 'ORDER_NOT_FOUND');
+      await connection.rollback();
+      throw new ApiError(404, 'Order not found.', 'ORDER_NOT_FOUND');
     }
 
     const order = existing[0];
+    const statusClean = (order.order_status || '').toLowerCase().replace(/[\s_]/g, '');
 
-    // Verify ownership
-    if (req.user.role !== 'admin' && parseInt(order.user_id, 10) !== parseInt(currentUserId, 10)) {
-      return res.status(403).json({
+    if (statusClean === 'cancelled') {
+      await connection.rollback();
+      return res.status(400).json({
         success: false,
-        message: 'You can only cancel your own orders.',
-        error: 'FORBIDDEN'
+        message: 'This order is already cancelled.',
+        error: 'ALREADY_CANCELLED'
       });
     }
 
-    const statusUpper = (order.order_status || '').toUpperCase();
-    if (statusUpper !== 'PLACED' && statusUpper !== 'ORDER_PLACED') {
+    if (statusClean !== 'orderplaced' && statusClean !== 'placed') {
+      await connection.rollback();
       return res.status(400).json({
         success: false,
         message: `Orders with status '${order.order_status}' cannot be cancelled online.`,
@@ -566,30 +712,39 @@ const cancelOrder = async (req, res, next) => {
       });
     }
 
-    // Restore stock
-    const [items] = await db.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+    // Atomically restore product stock
+    const [items] = await connection.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [order.id]);
     for (const item of items) {
-      await db.query(
+      await connection.query(
         'UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [item.quantity, item.product_id]
       );
     }
 
-    await db.query("UPDATE orders SET order_status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [orderId]);
+    await connection.query("UPDATE orders SET order_status = 'Cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [order.id]);
 
     // Record cancellation in order_status_history
-    await db.query(
+    await connection.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, $2, $3, $4)`,
-      [orderId, 'Cancelled', 'Cancelled by customer', req.user?.email || 'CUSTOMER']
+      [order.id, 'Cancelled', 'Cancelled by customer', req.user?.email || 'CUSTOMER']
     );
+
+    await connection.commit();
 
     return res.status(200).json({
       success: true,
-      message: 'Order cancelled successfully.'
+      message: 'Order cancelled successfully and inventory restored.'
     });
   } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rErr) {}
+    }
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 };
 
@@ -598,6 +753,8 @@ module.exports = {
   getAllOrders,
   getMyOrders,
   getOrderById,
+  trackOrder,
   updateOrderStatus,
   cancelOrder
 };
+

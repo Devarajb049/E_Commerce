@@ -17,9 +17,10 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     );
   }
 
-  // Not logged in at all -> redirect to /login
+  // Not logged in at all -> safe redirect to /login with redirect query param
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const redirectUrl = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?redirect=${redirectUrl}`} state={{ from: location }} replace />;
   }
 
   // Logged in, but lacks required administrator privilege

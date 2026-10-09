@@ -7,7 +7,7 @@ const { ApiError } = require('../middleware/errorHandler');
 // GET /api/products - Get all products with search, category filter, price filter & sorting
 const getAllProducts = async (req, res, next) => {
   try {
-    const { search, category, sort, min_price, max_price, in_stock_only } = req.query;
+    const { search, category, categoryId, sort, min_price, max_price, in_stock_only, sale, is_sale, featured } = req.query;
 
     let sql = `
       SELECT 
@@ -21,6 +21,9 @@ const getAllProducts = async (req, res, next) => {
         p.slug,
         p.description,
         p.price,
+        p.original_price,
+        p.is_featured,
+        p.is_sale,
         p.stock,
         p.stock AS stock_quantity,
         p.image,
@@ -45,17 +48,28 @@ const getAllProducts = async (req, res, next) => {
     }
 
     // Category filter by ID, slug, or name
-    if (category && category !== 'all' && category !== '') {
-      const catId = parseInt(category, 10);
+    const targetCategory = categoryId || category;
+    if (targetCategory && targetCategory !== 'all' && targetCategory !== '') {
+      const catId = parseInt(targetCategory, 10);
       if (!isNaN(catId)) {
         sql += ` AND p.category_id = $${paramIndex}`;
         params.push(catId);
         paramIndex++;
       } else {
         sql += ` AND (LOWER(c.name) = LOWER($${paramIndex}) OR LOWER(c.slug) = LOWER($${paramIndex}))`;
-        params.push(category.trim());
+        params.push(targetCategory.trim());
         paramIndex++;
       }
+    }
+
+    // Sale filter
+    if (sale === 'true' || is_sale === 'true') {
+      sql += ` AND (p.is_sale = TRUE OR (p.original_price IS NOT NULL AND p.original_price > p.price))`;
+    }
+
+    // Featured filter
+    if (featured === 'true') {
+      sql += ` AND p.is_featured = TRUE`;
     }
 
     // Price filters
@@ -97,10 +111,26 @@ const getAllProducts = async (req, res, next) => {
 
     const [rows] = await db.query(sql, params);
 
+    const formattedRows = rows.map((p) => {
+      const price = parseFloat(p.price);
+      const originalPrice = p.original_price ? parseFloat(p.original_price) : null;
+      let discountPct = null;
+      if (originalPrice && originalPrice > price) {
+        discountPct = Math.round(((originalPrice - price) / originalPrice) * 100);
+      }
+      return {
+        ...p,
+        price,
+        original_price: originalPrice,
+        discount_percentage: discountPct,
+        is_sale: Boolean(p.is_sale || (originalPrice && originalPrice > price))
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      count: rows.length,
-      data: rows,
+      count: formattedRows.length,
+      data: formattedRows,
       message: 'Products retrieved successfully.'
     });
   } catch (error) {
@@ -126,6 +156,9 @@ const getProductById = async (req, res, next) => {
         p.slug,
         p.description,
         p.price,
+        p.original_price,
+        p.is_featured,
+        p.is_sale,
         p.stock,
         p.stock AS stock_quantity,
         p.image,
@@ -144,9 +177,25 @@ const getProductById = async (req, res, next) => {
       throw new ApiError(404, `Product '${param}' not found.`, 'PRODUCT_NOT_FOUND');
     }
 
+    const p = rows[0];
+    const price = parseFloat(p.price);
+    const originalPrice = p.original_price ? parseFloat(p.original_price) : null;
+    let discountPct = null;
+    if (originalPrice && originalPrice > price) {
+      discountPct = Math.round(((originalPrice - price) / originalPrice) * 100);
+    }
+
+    const formattedProduct = {
+      ...p,
+      price,
+      original_price: originalPrice,
+      discount_percentage: discountPct,
+      is_sale: Boolean(p.is_sale || (originalPrice && originalPrice > price))
+    };
+
     return res.status(200).json({
       success: true,
-      data: rows[0],
+      data: formattedProduct,
       message: 'Product retrieved successfully.'
     });
   } catch (error) {
