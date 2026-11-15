@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useParams } from 'react-router-dom';
 import { FileText, Calendar, ArrowRight, Eye, XCircle, RotateCcw, Package, Clock, ShieldCheck, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +15,9 @@ import OrderTimeline from '../components/order/OrderTimeline';
  * Displays customer order history, live OrderTimeline, cancel order, return request, and invoices.
  */
 const Orders = () => {
+  const { id: routeOrderId } = useParams();
   const [searchParams] = useSearchParams();
-  const highlightedOrderNumber = searchParams.get('order');
+  const highlightedOrderNumber = searchParams.get('order') || routeOrderId;
 
   const { isAuthenticated, isAdmin, user } = useAuth();
   const { success, error: toastError } = useToast();
@@ -64,11 +65,24 @@ const Orders = () => {
         }
         setOrders(fetchedOrders);
 
-        // If URL specified a highlighted order, auto open tracking
+        // If URL specified a highlighted order or route param, auto open tracking
         if (highlightedOrderNumber) {
-          const match = fetchedOrders.find((o) => o.order_number === highlightedOrderNumber);
+          const match = fetchedOrders.find((o) => 
+            String(o.order_number) === String(highlightedOrderNumber) || 
+            String(o.id) === String(highlightedOrderNumber) ||
+            String(o.order_id) === String(highlightedOrderNumber)
+          );
           if (match) {
             handleOpenTracking(match);
+          } else {
+            // Direct fetch if not found in loaded order list
+            api.getOrder(highlightedOrderNumber)
+              .then((res) => {
+                if (res.success && res.data) {
+                  setTrackingOrder(res.data);
+                }
+              })
+              .catch(() => {});
           }
         }
       }

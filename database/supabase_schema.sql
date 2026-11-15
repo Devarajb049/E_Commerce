@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS orders (
     ),
     order_status VARCHAR(50) NOT NULL DEFAULT 'order_placed' CHECK (
         order_status IN (
-            'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded',
+            'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded', 'return_requested',
+            'Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded', 'Return Requested',
             'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'RETURN_REQUESTED'
         )
     ),

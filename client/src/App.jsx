@@ -57,6 +57,7 @@ function AppContent() {
         <Routes>
           {/* Customer Store Routes */}
           <Route path="/" element={<Home />} />
+          <Route path="/shop" element={<Products />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
           <Route path="/categories" element={<CategoriesPage />} />
@@ -82,6 +83,22 @@ function AppContent() {
             }
           />
           <Route
+            path="/orders/:id/track"
+            element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders/:id"
+            element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/order-success/:orderId"
             element={
               <ProtectedRoute>
@@ -97,6 +114,9 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+          <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
+          <Route path="/account" element={<Navigate to="/orders" replace />} />
+          <Route path="/profile" element={<Navigate to="/orders" replace />} />
 
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />

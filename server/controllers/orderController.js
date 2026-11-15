@@ -136,7 +136,8 @@ const createOrder = async (req, res, next) => {
         [item.quantity, item.product_id]
       );
 
-      if (!stockUpdateRows || stockUpdateRows.length === 0) {
+      const stockUpdated = (stockUpdateRows && stockUpdateRows.length > 0) || (stockMeta && stockMeta.affectedRows > 0);
+      if (!stockUpdated) {
         await connection.rollback();
         throw new ApiError(
           400,

@@ -11,8 +11,8 @@ const getSummary = async (req, res, next) => {
     const [salesResult] = await db.query(`
       SELECT 
         COUNT(*) AS total_orders,
-        COALESCE(SUM(CASE WHEN order_status NOT IN ('cancelled', 'CANCELLED') THEN total ELSE 0 END), 0) AS total_sales,
-        COALESCE(SUM(CASE WHEN order_status IN ('order_placed', 'processing', 'PLACED', 'PROCESSING') THEN 1 ELSE 0 END), 0) AS pending_orders
+        COALESCE(SUM(CASE WHEN LOWER(order_status) NOT IN ('cancelled', 'refunded') THEN total ELSE 0 END), 0) AS total_sales,
+        COALESCE(SUM(CASE WHEN LOWER(order_status) IN ('order_placed', 'order placed', 'processing', 'placed') THEN 1 ELSE 0 END), 0) AS pending_orders
       FROM orders
     `);
 
@@ -20,7 +20,7 @@ const getSummary = async (req, res, next) => {
     const [todayResult] = await db.query(`
       SELECT 
         COUNT(*) AS today_orders,
-        COALESCE(SUM(CASE WHEN order_status NOT IN ('cancelled', 'CANCELLED') THEN total ELSE 0 END), 0) AS today_sales
+        COALESCE(SUM(CASE WHEN LOWER(order_status) NOT IN ('cancelled', 'refunded') THEN total ELSE 0 END), 0) AS today_sales
       FROM orders
       WHERE DATE(created_at) = CURRENT_DATE
     `);
@@ -72,7 +72,7 @@ const getSalesByCategory = async (req, res, next) => {
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
       LEFT JOIN order_items oi ON p.id = oi.product_id
-      LEFT JOIN orders o ON oi.order_id = o.id AND o.order_status NOT IN ('cancelled', 'CANCELLED')
+      LEFT JOIN orders o ON oi.order_id = o.id AND LOWER(o.order_status) NOT IN ('cancelled', 'refunded')
       GROUP BY c.id, c.name
       ORDER BY total_sales DESC, c.name ASC;
     `;
@@ -112,7 +112,7 @@ const getTopProducts = async (req, res, next) => {
       FROM products p
       INNER JOIN categories c ON p.category_id = c.id
       LEFT JOIN order_items oi ON p.id = oi.product_id
-      LEFT JOIN orders o ON oi.order_id = o.id AND o.order_status NOT IN ('cancelled', 'CANCELLED')
+      LEFT JOIN orders o ON oi.order_id = o.id AND LOWER(o.order_status) NOT IN ('cancelled', 'refunded')
       GROUP BY p.id, p.name, c.name, p.price, p.stock, p.image
       ORDER BY total_quantity_sold DESC, total_revenue DESC
       LIMIT 10;
@@ -151,7 +151,7 @@ const getDailySales = async (req, res, next) => {
         COALESCE(SUM(tax), 0) AS total_tax,
         COALESCE(SUM(total), 0) AS total_sales
       FROM orders
-      WHERE order_status NOT IN ('cancelled', 'CANCELLED')
+      WHERE LOWER(order_status) NOT IN ('cancelled', 'refunded')
       GROUP BY DATE(created_at)
       ORDER BY sale_date DESC
       LIMIT 30;
