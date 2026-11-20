@@ -8,6 +8,26 @@ const { ApiError } = require('../middleware/errorHandler');
 
 const TAX_RATE = parseFloat(process.env.TAX_RATE || '0.18');
 
+/**
+ * Standardize lifecycle order status strings across database, APIs, and frontends.
+ * Uniformly maps legacy/case-variant statuses to canonical uppercase tokens:
+ * PLACED, PROCESSING, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, RETURN_REQUESTED, RETURNED, REFUNDED.
+ */
+const normalizeOrderStatus = (raw) => {
+  if (!raw) return 'PLACED';
+  const clean = String(raw).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (clean === 'ORDER_PLACED' || clean === 'ORDERPLACED' || clean === 'PLACED') return 'PLACED';
+  if (clean === 'PROCESSING') return 'PROCESSING';
+  if (clean === 'SHIPPED') return 'SHIPPED';
+  if (clean === 'OUT_FOR_DELIVERY' || clean === 'OUTFORDELIVERY') return 'OUT_FOR_DELIVERY';
+  if (clean === 'DELIVERED') return 'DELIVERED';
+  if (clean === 'CANCELLED' || clean === 'CANCELED') return 'CANCELLED';
+  if (clean === 'RETURN_REQUESTED' || clean === 'RETURNREQUESTED') return 'RETURN_REQUESTED';
+  if (clean === 'RETURNED') return 'RETURNED';
+  if (clean === 'REFUNDED') return 'REFUNDED';
+  return clean;
+};
+
 // Generate human-friendly order identifier (e.g. CC-10245 or ORD-839201)
 const generateOrderNumber = () => {
   const timestamp = Date.now().toString().slice(-5);
@@ -93,7 +113,7 @@ const createOrder = async (req, res, next) => {
     const orderNumber = generateOrderNumber();
 
     const normalizedPaymentMethod = (payment_method || 'cod').toLowerCase();
-    const orderStatus = 'order_placed';
+    const orderStatus = 'PLACED';
 
     // 1. Insert Orders record with authenticated user_id
     const [orderRows, orderMeta] = await connection.query(
@@ -151,7 +171,7 @@ const createOrder = async (req, res, next) => {
     await connection.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, $2, $3, $4)`,
-      [orderId, 'Order Placed', 'Order placed successfully by customer', customer.name.trim()]
+      [orderId, 'PLACED', 'Order placed successfully by customer', customer.name.trim()]
     );
 
     // 4. If authenticated user has active carts, clear their cart items
@@ -243,8 +263,13 @@ const getAllOrders = async (req, res, next) => {
     let paramIndex = 1;
 
     if (status && status !== 'all') {
-      sql += ` AND (LOWER(o.order_status) = LOWER($${paramIndex}) OR UPPER(o.order_status) = UPPER($${paramIndex}))`;
-      params.push(status.trim());
+      const clean = normalizeOrderStatus(status);
+      sql += ` AND (
+        UPPER(o.order_status) = $${paramIndex} OR 
+        UPPER(REPLACE(REPLACE(o.order_status, ' ', '_'), '-', '_')) = $${paramIndex} OR 
+        LOWER(o.order_status) = LOWER($${paramIndex})
+      )`;
+      params.push(clean);
       paramIndex++;
     }
 
@@ -270,11 +295,15 @@ const getAllOrders = async (req, res, next) => {
     `;
 
     const [rows] = await db.query(sql, params);
+    const normalizedRows = rows.map((r) => ({
+      ...r,
+      order_status: normalizeOrderStatus(r.order_status)
+    }));
 
     return res.status(200).json({
       success: true,
-      count: rows.length,
-      data: rows,
+      count: normalizedRows.length,
+      data: normalizedRows,
       message: 'Orders retrieved successfully.'
     });
   } catch (error) {
@@ -335,11 +364,15 @@ const getMyOrders = async (req, res, next) => {
     `;
 
     const [rows] = await db.query(sql, [userId, userEmail]);
+    const normalizedRows = rows.map((r) => ({
+      ...r,
+      order_status: normalizeOrderStatus(r.order_status)
+    }));
 
     return res.status(200).json({
       success: true,
-      count: rows.length,
-      data: rows,
+      count: normalizedRows.length,
+      data: normalizedRows,
       message: 'Your orders retrieved successfully.'
     });
   } catch (error) {
@@ -443,9 +476,16 @@ const getOrderById = async (req, res, next) => {
       success: true,
       data: {
         ...order,
+        order_status: normalizeOrderStatus(order.order_status),
         items: itemRows,
-        status_history: historyRows,
-        history: historyRows
+        status_history: historyRows.map((h) => ({
+          ...h,
+          status: normalizeOrderStatus(h.status)
+        })),
+        history: historyRows.map((h) => ({
+          ...h,
+          status: normalizeOrderStatus(h.status)
+        }))
       },
       message: 'Order details retrieved successfully.'
     });
@@ -551,9 +591,16 @@ const trackOrder = async (req, res, next) => {
       success: true,
       data: {
         ...order,
+        order_status: normalizeOrderStatus(order.order_status),
         items: itemRows,
-        status_history: historyRows,
-        history: historyRows,
+        status_history: historyRows.map((h) => ({
+          ...h,
+          status: normalizeOrderStatus(h.status)
+        })),
+        history: historyRows.map((h) => ({
+          ...h,
+          status: normalizeOrderStatus(h.status)
+        })),
         latest_status_timestamp: latestTimestamp,
         last_updated: latestTimestamp
       },
@@ -566,63 +613,54 @@ const trackOrder = async (req, res, next) => {
 
 /**
  * PUT /api/orders/:id/status - Update order fulfillment status (Administrator only)
+ * Supports targeting by numeric ID or human-readable order number.
+ * Updates order_status in database and logs transition into order_status_history.
  */
 const updateOrderStatus = async (req, res, next) => {
   let connection;
   try {
-    const orderId = parseInt(req.params.id, 10);
+    const orderIdentifier = req.params.id;
     const { status, note } = req.body;
 
-    if (isNaN(orderId)) {
-      throw new ApiError(400, 'Invalid order ID parameter.', 'INVALID_ID');
+    if (!orderIdentifier) {
+      throw new ApiError(400, 'Order identifier parameter is required.', 'INVALID_ID');
     }
 
+    const normalizedStatus = normalizeOrderStatus(status);
+
     const validStatuses = [
-      'Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded',
-      'order_placed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded',
-      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'
+      'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'RETURN_REQUESTED'
     ];
 
-    const matchedStatus = validStatuses.find(
-      (s) => s.toLowerCase().replace(/[\s_]/g, '') === String(status || '').trim().toLowerCase().replace(/[\s_]/g, '')
-    );
-
-    if (!matchedStatus) {
+    if (!validStatuses.includes(normalizedStatus)) {
       throw new ApiError(
         422,
-        `Invalid status '${status}'. Must be one of: Order Placed, Processing, Shipped, Out for Delivery, Delivered, Cancelled, Returned, Refunded`,
+        `Invalid status '${status}'. Must be one of: PLACED, PROCESSING, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, RETURNED, REFUNDED`,
         'INVALID_STATUS'
       );
     }
 
-    // Standardize to clean display title
-    let targetStatus = 'Processing';
-    const cleanLower = String(status).trim().toLowerCase().replace(/[\s_]/g, '');
-    if (cleanLower === 'orderplaced' || cleanLower === 'placed') targetStatus = 'Order Placed';
-    else if (cleanLower === 'processing') targetStatus = 'Processing';
-    else if (cleanLower === 'shipped') targetStatus = 'Shipped';
-    else if (cleanLower === 'outfordelivery') targetStatus = 'Out for Delivery';
-    else if (cleanLower === 'delivered') targetStatus = 'Delivered';
-    else if (cleanLower === 'cancelled') targetStatus = 'Cancelled';
-    else if (cleanLower === 'returned' || cleanLower === 'returnrequested') targetStatus = 'Returned';
-    else if (cleanLower === 'refunded') targetStatus = 'Refunded';
-
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    const [existing] = await connection.query('SELECT id, order_status FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+    const [existing] = await connection.query(
+      'SELECT id, order_number, order_status FROM orders WHERE (id::text = $1 OR order_number = $1) FOR UPDATE',
+      [String(orderIdentifier)]
+    );
     if (existing.length === 0) {
       await connection.rollback();
-      throw new ApiError(404, `Order ID ${orderId} not found.`, 'ORDER_NOT_FOUND');
+      throw new ApiError(404, `Order '${orderIdentifier}' not found.`, 'ORDER_NOT_FOUND');
     }
 
-    const currentStatus = (existing[0].order_status || '').toLowerCase();
-    const isCancelling = targetStatus === 'Cancelled';
-    const wasCancelled = currentStatus === 'cancelled';
+    const targetOrder = existing[0];
+    const targetOrderId = targetOrder.id;
+    const currentStatus = normalizeOrderStatus(targetOrder.order_status);
+    const isCancelling = normalizedStatus === 'CANCELLED';
+    const wasCancelled = currentStatus === 'CANCELLED';
 
     // If transitioning to Cancelled from an active state, restore product stock safely
     if (isCancelling && !wasCancelled) {
-      const [items] = await connection.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      const [items] = await connection.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [targetOrderId]);
       for (const item of items) {
         await connection.query(
           'UPDATE products SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -633,24 +671,27 @@ const updateOrderStatus = async (req, res, next) => {
 
     await connection.query(
       'UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [targetStatus, orderId]
+      [normalizedStatus, targetOrderId]
     );
 
     // Record transition in order_status_history
     await connection.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, $2, $3, $4)`,
-      [orderId, targetStatus, note || `Status updated to ${targetStatus}`, req.user?.email || 'ADMIN']
+      [targetOrderId, normalizedStatus, note || `Status updated to ${normalizedStatus}`, req.user?.email || 'ADMIN']
     );
 
     await connection.commit();
 
-    const [updated] = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    const [updated] = await db.query('SELECT * FROM orders WHERE id = $1', [targetOrderId]);
 
     return res.status(200).json({
       success: true,
-      data: updated[0],
-      message: `Order status updated to '${targetStatus}'.`
+      data: {
+        ...updated[0],
+        order_status: normalizeOrderStatus(updated[0].order_status)
+      },
+      message: `Order status updated to '${normalizedStatus}'.`
     });
   } catch (error) {
     if (connection) {
@@ -665,7 +706,7 @@ const updateOrderStatus = async (req, res, next) => {
 };
 
 /**
- * PUT /api/orders/:id/cancel - Customer self-cancellation if order is still in Order Placed status
+ * PUT /api/orders/:id/cancel - Customer self-cancellation if order is still in PLACED status
  */
 const cancelOrder = async (req, res, next) => {
   let connection;
@@ -693,9 +734,9 @@ const cancelOrder = async (req, res, next) => {
     }
 
     const order = existing[0];
-    const statusClean = (order.order_status || '').toLowerCase().replace(/[\s_]/g, '');
+    const statusNormalized = normalizeOrderStatus(order.order_status);
 
-    if (statusClean === 'cancelled') {
+    if (statusNormalized === 'CANCELLED') {
       await connection.rollback();
       return res.status(400).json({
         success: false,
@@ -704,7 +745,7 @@ const cancelOrder = async (req, res, next) => {
       });
     }
 
-    if (statusClean !== 'orderplaced' && statusClean !== 'placed') {
+    if (statusNormalized !== 'PLACED') {
       await connection.rollback();
       return res.status(400).json({
         success: false,
@@ -722,13 +763,13 @@ const cancelOrder = async (req, res, next) => {
       );
     }
 
-    await connection.query("UPDATE orders SET order_status = 'Cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [order.id]);
+    await connection.query("UPDATE orders SET order_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [order.id]);
 
     // Record cancellation in order_status_history
     await connection.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
        VALUES ($1, $2, $3, $4)`,
-      [order.id, 'Cancelled', 'Cancelled by customer', req.user?.email || 'CUSTOMER']
+      [order.id, 'CANCELLED', 'Cancelled by customer', req.user?.email || 'CUSTOMER']
     );
 
     await connection.commit();
@@ -756,6 +797,7 @@ module.exports = {
   getOrderById,
   trackOrder,
   updateOrderStatus,
-  cancelOrder
+  cancelOrder,
+  normalizeOrderStatus
 };
 

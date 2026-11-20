@@ -2,11 +2,32 @@ import React from 'react';
 import { Check, Clock, Package, Truck, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
 
 /**
+ * Normalizes status strings across database conventions, uppercase tokens,
+ * and Title Case strings to guarantee accurate timeline stage matching.
+ */
+export const normalizeTimelineStatus = (raw) => {
+  if (!raw) return 'PLACED';
+  const clean = String(raw).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (clean === 'ORDER_PLACED' || clean === 'ORDERPLACED' || clean === 'PLACED') return 'PLACED';
+  if (clean === 'PROCESSING') return 'PROCESSING';
+  if (clean === 'SHIPPED') return 'SHIPPED';
+  if (clean === 'OUT_FOR_DELIVERY' || clean === 'OUTFORDELIVERY') return 'OUT_FOR_DELIVERY';
+  if (clean === 'DELIVERED') return 'DELIVERED';
+  if (clean === 'CANCELLED' || clean === 'CANCELED') return 'CANCELLED';
+  if (clean === 'RETURN_REQUESTED' || clean === 'RETURNREQUESTED') return 'RETURN_REQUESTED';
+  if (clean === 'RETURNED') return 'RETURNED';
+  if (clean === 'REFUNDED') return 'REFUNDED';
+  return clean;
+};
+
+/**
  * ClickCart Production-Grade Order Progress Timeline
  * Desktop: Clean horizontal tracker with progress lines and current node pulse
  * Mobile: Vertical readable layout
  */
 const OrderTimeline = ({ currentStatus = 'PLACED', createdAt, history = [] }) => {
+  const normalized = normalizeTimelineStatus(currentStatus);
+
   const steps = [
     { key: 'PLACED', label: 'Order Placed', icon: Clock },
     { key: 'PROCESSING', label: 'Processing', icon: Package },
@@ -15,17 +36,18 @@ const OrderTimeline = ({ currentStatus = 'PLACED', createdAt, history = [] }) =>
     { key: 'DELIVERED', label: 'Delivered', icon: CheckCircle2 }
   ];
 
-  const isTerminalCancelled = currentStatus === 'CANCELLED';
-  const isTerminalReturned = currentStatus === 'RETURNED' || currentStatus === 'RETURN_REQUESTED';
-  const isTerminalRefunded = currentStatus === 'REFUNDED';
+  const isTerminalCancelled = normalized === 'CANCELLED';
+  const isTerminalReturned = normalized === 'RETURNED' || normalized === 'RETURN_REQUESTED';
+  const isTerminalRefunded = normalized === 'REFUNDED';
 
   // Find index of current status
-  let currentIndex = steps.findIndex((s) => s.key === currentStatus);
+  let currentIndex = steps.findIndex((s) => s.key === normalized);
   if (currentIndex === -1) {
-    if (currentStatus === 'PLACED') currentIndex = 0;
-    else if (currentStatus === 'PROCESSING') currentIndex = 1;
-    else if (currentStatus === 'SHIPPED') currentIndex = 2;
-    else if (currentStatus === 'DELIVERED') currentIndex = 4;
+    if (normalized === 'PLACED') currentIndex = 0;
+    else if (normalized === 'PROCESSING') currentIndex = 1;
+    else if (normalized === 'SHIPPED') currentIndex = 2;
+    else if (normalized === 'OUT_FOR_DELIVERY') currentIndex = 3;
+    else if (normalized === 'DELIVERED') currentIndex = 4;
     else currentIndex = 0;
   }
 
@@ -64,21 +86,20 @@ const OrderTimeline = ({ currentStatus = 'PLACED', createdAt, history = [] }) =>
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
       {/* DESKTOP TIMELINE (Horizontal) */}
       <div className="hidden sm:block">
         <div className="relative flex items-center justify-between">
           
-          {/* Background Connecting Bar */}
-          <div className="absolute top-4 left-6 right-6 h-[2px] bg-slate-200 z-0" />
-
-          {/* Active Filled Progress Bar */}
-          <div
-            className="absolute top-4 left-6 h-[2px] bg-brand-primary z-0 transition-all duration-500"
-            style={{
-              width: `${(currentIndex / (steps.length - 1)) * 90}%`
-            }}
-          />
+          {/* Background Connecting Bar with active filled progress bar inside */}
+          <div className="absolute top-4 left-6 right-6 h-[2px] bg-slate-200 z-0 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand-primary transition-all duration-500 rounded-full"
+              style={{
+                width: `${(currentIndex / (steps.length - 1)) * 100}%`
+              }}
+            />
+          </div>
 
           {steps.map((step, idx) => {
             const isCompleted = idx < currentIndex;
@@ -166,6 +187,36 @@ const OrderTimeline = ({ currentStatus = 'PLACED', createdAt, history = [] }) =>
           );
         })}
       </div>
+
+      {/* Activity Log / History Events */}
+      {history && history.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-200/80">
+          <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            Status History
+          </h5>
+          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+            {history.map((ev, i) => (
+              <div key={i} className="flex items-start justify-between text-xs text-slate-600 bg-slate-50/60 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0" />
+                  <span className="font-semibold text-slate-800">{String(ev.status || '').replace(/_/g, ' ')}</span>
+                  {ev.note && <span className="text-slate-500 text-[11px] truncate max-w-xs">— {ev.note}</span>}
+                </div>
+                {ev.created_at && (
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+                    {new Date(ev.created_at).toLocaleString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

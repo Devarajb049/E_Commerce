@@ -8,7 +8,7 @@ import SearchBar from '../components/SearchBar';
 import { TableSkeleton } from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import ErrorMessage from '../components/ErrorMessage';
-import OrderTimeline from '../components/order/OrderTimeline';
+import OrderTimeline, { normalizeTimelineStatus } from '../components/order/OrderTimeline';
 
 /**
  * ClickCart Production-Grade Orders & Tracking Page
@@ -53,7 +53,7 @@ const Orders = () => {
       if (res.success && res.data) {
         let fetchedOrders = res.data;
         if (statusFilter !== 'all' && !isAdmin) {
-          fetchedOrders = fetchedOrders.filter((o) => o.order_status === statusFilter);
+          fetchedOrders = fetchedOrders.filter((o) => normalizeTimelineStatus(o.order_status) === statusFilter);
         }
         if (search && !isAdmin) {
           const s = search.toLowerCase();
@@ -76,7 +76,9 @@ const Orders = () => {
             handleOpenTracking(match);
           } else {
             // Direct fetch if not found in loaded order list
-            api.getOrder(highlightedOrderNumber)
+            const fetchFn = api.trackOrder ? api.trackOrder : api.getOrder;
+            fetchFn(highlightedOrderNumber)
+              .catch(() => api.getOrder(highlightedOrderNumber))
               .then((res) => {
                 if (res.success && res.data) {
                   setTrackingOrder(res.data);
@@ -98,17 +100,52 @@ const Orders = () => {
     fetchOrders();
   }, [statusFilter, isAuthenticated, isAdmin]);
 
+  // Keep live tracking modal synchronized with server database updates
+  useEffect(() => {
+    if (!trackingOrder) return;
+    const interval = setInterval(async () => {
+      try {
+        const targetId = trackingOrder.order_number || trackingOrder.order_id || trackingOrder.id;
+        let res;
+        try {
+          res = await api.trackOrder(targetId);
+        } catch (e) {
+          res = await api.getOrder(targetId);
+        }
+        if (res && res.success && res.data) {
+          setTrackingOrder(res.data);
+          setOrders((prev) =>
+            prev.map((o) =>
+              (o.order_number && o.order_number === res.data.order_number) ||
+              (o.order_id && o.order_id === res.data.order_id) ||
+              (o.id && o.id === res.data.id)
+                ? { ...o, order_status: res.data.order_status }
+                : o
+            )
+          );
+        }
+      } catch (e) {}
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [trackingOrder?.order_number, trackingOrder?.id, trackingOrder?.order_id]);
+
   const handleOpenTracking = async (order) => {
     try {
-      // Fetch full order details including line items
-      const res = await api.getOrder(order.order_number || order.order_id);
-      if (res.success && res.data) {
+      // Set initial snapshot immediately
+      setTrackingOrder(order);
+      // Fetch live fresh tracking details including status history and timestamps
+      const targetId = order.order_number || order.order_id || order.id;
+      let res;
+      try {
+        res = await api.trackOrder(targetId);
+      } catch (trackErr) {
+        res = await api.getOrder(targetId);
+      }
+      if (res && res.success && res.data) {
         setTrackingOrder(res.data);
-      } else {
-        setTrackingOrder(order);
       }
     } catch (err) {
-      setTrackingOrder(order);
+      console.warn('Could not refresh tracking details:', err);
     }
   };
 
@@ -171,7 +208,8 @@ const Orders = () => {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
+    const st = normalizeTimelineStatus(status);
+    switch (st) {
       case 'DELIVERED':
         return <span className="px-2.5 py-0.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full">Delivered</span>;
       case 'SHIPPED':
@@ -186,6 +224,8 @@ const Orders = () => {
         return <span className="px-2.5 py-0.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full">Return Requested</span>;
       case 'RETURNED':
         return <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-200 rounded-full">Returned & Refunded</span>;
+      case 'REFUNDED':
+        return <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-200 rounded-full">Refunded</span>;
       default:
         return <span className="px-2.5 py-0.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full">Placed</span>;
     }
@@ -226,7 +266,7 @@ const Orders = () => {
         </form>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 text-xs">
-          {['all', 'PLACED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((st) => (
+          {['all', 'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -236,7 +276,7 @@ const Orders = () => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {st === 'all' ? 'All Orders' : st}
+              {st === 'all' ? 'All Orders' : st.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
@@ -319,9 +359,9 @@ const Orders = () => {
                     <span>Invoice</span>
                   </Link>
 
-                  {order.order_status === 'PLACED' && (
+                  {normalizeTimelineStatus(order.order_status) === 'PLACED' && (
                     <button
-                      onClick={() => handleCancelOrder(order.order_id)}
+                      onClick={() => handleCancelOrder(order.order_id || order.id)}
                       disabled={actionLoading}
                       className="py-1.5 px-3 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors inline-flex items-center gap-1"
                     >
@@ -345,21 +385,39 @@ const Orders = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <span className="text-xs font-semibold text-brand-primary">Live Order Tracker</span>
-                <h3 className="text-lg font-bold text-brand-dark">
-                  Order {trackingOrder.order_number}
-                </h3>
+                <div className="flex items-center gap-2.5 mt-0.5">
+                  <h3 className="text-lg font-bold text-brand-dark">
+                    Order {trackingOrder.order_number}
+                  </h3>
+                  {getStatusBadge(trackingOrder.order_status)}
+                </div>
               </div>
-              <button
-                onClick={() => setTrackingOrder(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleOpenTracking(trackingOrder)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-brand-primary hover:bg-slate-100 transition-colors text-xs inline-flex items-center gap-1 font-medium"
+                  title="Refresh live status"
+                  aria-label="Refresh status"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+                <button
+                  onClick={() => setTrackingOrder(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Order Timeline Component */}
             <div className="bg-slate-50/70 p-5 rounded-xl border border-slate-100">
-              <OrderTimeline currentStatus={trackingOrder.order_status} createdAt={trackingOrder.created_at} />
+              <OrderTimeline
+                currentStatus={trackingOrder.order_status}
+                createdAt={trackingOrder.created_at}
+                history={trackingOrder.status_history || trackingOrder.history || []}
+              />
             </div>
 
             {/* Order Items Snapshot */}
@@ -424,9 +482,9 @@ const Orders = () => {
               </Link>
 
               <div className="flex items-center gap-2">
-                {trackingOrder.order_status === 'PLACED' && (
+                {normalizeTimelineStatus(trackingOrder.order_status) === 'PLACED' && (
                   <button
-                    onClick={() => handleCancelOrder(trackingOrder.order_id)}
+                    onClick={() => handleCancelOrder(trackingOrder.order_id || trackingOrder.id)}
                     disabled={actionLoading}
                     className="py-2 px-3 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
                   >
@@ -434,7 +492,7 @@ const Orders = () => {
                   </button>
                 )}
 
-                {trackingOrder.order_status === 'DELIVERED' && (
+                {normalizeTimelineStatus(trackingOrder.order_status) === 'DELIVERED' && (
                   <button
                     onClick={() => setShowReturnModal(true)}
                     className="py-2 px-3 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors inline-flex items-center gap-1"

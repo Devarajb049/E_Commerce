@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  DollarSign, 
-  ShoppingBag, 
-  Package, 
-  Users, 
-  AlertTriangle, 
+import {
+  DollarSign,
+  ShoppingBag,
+  Package,
+  Users,
+  AlertTriangle,
   ArrowRight,
   TrendingUp,
   FileText,
@@ -18,6 +18,7 @@ import api from '../services/api';
 import AdminLayout from '../components/AdminLayout';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import { normalizeTimelineStatus } from '../components/order/OrderTimeline';
 
 const AdminDashboard = () => {
   const [summary, setSummary] = useState(null);
@@ -94,8 +95,8 @@ const AdminDashboard = () => {
   }
 
   // Calculate chart max for proportional heights
-  const maxDaySale = dailySales.length > 0 
-    ? Math.max(...dailySales.map((d) => d.total_sales || 0), 1000) 
+  const maxDaySale = dailySales.length > 0
+    ? Math.max(...dailySales.map((d) => d.total_sales || 0), 1000)
     : 1000;
 
   // Header quick action CTAs
@@ -111,23 +112,30 @@ const AdminDashboard = () => {
   );
 
   const getStatusBadge = (status) => {
-    switch (status) {
+    const st = normalizeTimelineStatus(status);
+    switch (st) {
       case 'DELIVERED':
         return <span className="badge badge-success">Delivered</span>;
       case 'SHIPPED':
         return <span className="badge badge-indigo">Shipped</span>;
+      case 'OUT_FOR_DELIVERY':
+        return <span className="badge badge-indigo">Out for Delivery</span>;
       case 'PROCESSING':
         return <span className="badge badge-warning">Processing</span>;
       case 'CANCELLED':
         return <span className="badge badge-error">Cancelled</span>;
+      case 'RETURN_REQUESTED':
+      case 'RETURNED':
+      case 'REFUNDED':
+        return <span className="badge badge-neutral">{st.replace(/_/g, ' ')}</span>;
       default:
         return <span className="badge badge-neutral">Placed</span>;
     }
   };
 
   return (
-    <AdminLayout 
-      title="Dashboard" 
+    <AdminLayout
+      title="Dashboard"
       subtitle="Real-time commercial metrics calculated via MySQL queries"
       actions={headerActions}
     >
@@ -135,7 +143,7 @@ const AdminDashboard = () => {
 
         {/* 1. ADMIN KPI ROW (Rule #35 & #36: Restrained cards, real data) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
+
           {/* Total Revenue */}
           <div className="bg-white border border-brand-border rounded-card p-5 shadow-subtle flex items-start justify-between">
             <div className="space-y-1">
@@ -240,7 +248,7 @@ const AdminDashboard = () => {
             <div className="relative pt-6">
               {/* Tooltip Popup on Hover */}
               {activeTooltip && (
-                <div 
+                <div
                   className="absolute z-10 px-2.5 py-1.5 bg-brand-dark text-white text-[11px] rounded-[6px] shadow-dropdown pointer-events-none -translate-x-1/2 -top-2 transition-all duration-fast"
                   style={{ left: `${activeTooltip.x}px` }}
                 >
@@ -259,8 +267,8 @@ const AdminDashboard = () => {
                 </div>
 
                 {dailySales.map((item, index) => {
-                  const heightPercent = maxDaySale > 0 
-                    ? Math.max((item.total_sales / maxDaySale) * 100, 8) 
+                  const heightPercent = maxDaySale > 0
+                    ? Math.max((item.total_sales / maxDaySale) * 100, 8)
                     : 8;
 
                   const dateFormatted = new Date(item.sale_date).toLocaleDateString('en-IN', {
@@ -269,7 +277,7 @@ const AdminDashboard = () => {
                   });
 
                   return (
-                    <div 
+                    <div
                       key={item.sale_date}
                       className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative"
                       onMouseEnter={(e) => {
@@ -285,7 +293,7 @@ const AdminDashboard = () => {
                       onMouseLeave={() => setActiveTooltip(null)}
                     >
                       {/* Bar with smooth height transition */}
-                      <div 
+                      <div
                         className="w-full max-w-[36px] bg-brand-indigo group-hover:bg-brand-indigo-hover rounded-t-[4px] transition-all duration-normal"
                         style={{ height: `${heightPercent}%` }}
                       />
@@ -304,7 +312,7 @@ const AdminDashboard = () => {
 
         {/* 3. RECENT ORDERS & TOP PRODUCTS ROW (Rule #35, #37, #38) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
+
           {/* Recent Orders Table (7 Cols) */}
           <div className="lg:col-span-7 bg-white border border-brand-border rounded-card p-5 sm:p-6 shadow-subtle space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -317,8 +325,8 @@ const AdminDashboard = () => {
                 </p>
               </div>
 
-              <Link 
-                to="/admin/orders" 
+              <Link
+                to="/admin/orders"
                 className="text-xs font-semibold text-brand-indigo hover:text-brand-indigo-hover inline-flex items-center gap-1 transition-colors"
               >
                 <span>View all</span>
@@ -344,8 +352,8 @@ const AdminDashboard = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {recentOrders.map((ord) => (
-                      <tr 
-                        key={ord.order_id} 
+                      <tr
+                        key={ord.order_id}
                         className="hover:bg-[#F9FAFB] transition-colors duration-fast"
                       >
                         <td className="py-3 px-3 font-mono font-bold text-brand-dark">
@@ -389,8 +397,8 @@ const AdminDashboard = () => {
                 </p>
               </div>
 
-              <Link 
-                to="/admin/products" 
+              <Link
+                to="/admin/products"
                 className="text-xs font-semibold text-brand-indigo hover:text-brand-indigo-hover"
               >
                 Inventory

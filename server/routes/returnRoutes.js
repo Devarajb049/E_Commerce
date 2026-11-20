@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { authenticateToken, requireAdmin } = require('../middleware/authMiddleware');
+const { normalizeOrderStatus } = require('../controllers/orderController');
 
 /**
  * POST /api/returns - Customer requests return for a delivered order
@@ -31,8 +32,8 @@ router.post('/', authenticateToken, async (req, res, next) => {
     }
 
     const order = orderRows[0];
-    const statusUpper = (order.order_status || '').toUpperCase();
-    if (statusUpper !== 'DELIVERED') {
+    const statusNormalized = normalizeOrderStatus(order.order_status);
+    if (statusNormalized !== 'DELIVERED') {
       return res.status(400).json({
         success: false,
         message: 'Return requests can only be submitted for delivered orders.'
@@ -47,13 +48,13 @@ router.post('/', authenticateToken, async (req, res, next) => {
     );
 
     await db.query(
-      "UPDATE orders SET order_status = 'Return Requested', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+      "UPDATE orders SET order_status = 'RETURN_REQUESTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
       [order.id]
     );
 
     await db.query(
       `INSERT INTO order_status_history (order_id, status, note, changed_by)
-       VALUES ($1, 'Return Requested', $2, $3)`,
+       VALUES ($1, 'RETURN_REQUESTED', $2, $3)`,
       [order.id, `Return requested: ${reason.trim()}`, req.user?.email || 'CUSTOMER']
     );
 
@@ -153,12 +154,12 @@ router.put('/:id/status', authenticateToken, requireAdmin, async (req, res, next
           await db.query('UPDATE order_returns SET restocked = TRUE WHERE id = $1', [returnId]);
         }
         await db.query(
-          "UPDATE orders SET order_status = 'Returned', payment_status = 'REFUNDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+          "UPDATE orders SET order_status = 'RETURNED', payment_status = 'REFUNDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
           [ret.order_id]
         );
         await db.query(
           `INSERT INTO order_status_history (order_id, status, note, changed_by)
-           VALUES ($1, 'Returned', 'Return completed and inventory restocked', $2)`,
+           VALUES ($1, 'RETURNED', 'Return completed and inventory restocked', $2)`,
           [ret.order_id, req.user?.email || 'ADMIN']
         );
       }

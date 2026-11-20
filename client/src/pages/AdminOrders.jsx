@@ -6,6 +6,7 @@ import AdminLayout from '../components/AdminLayout';
 import { TableSkeleton } from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../context/ToastContext';
+import { normalizeTimelineStatus } from '../components/order/OrderTimeline';
 
 const AdminOrders = () => {
   const { success, error: toastError } = useToast();
@@ -49,12 +50,20 @@ const AdminOrders = () => {
     try {
       const res = await api.updateOrderStatus(orderId, newStatus);
       if (res.success) {
-        success(`Order status updated to ${newStatus}`);
+        const canonicalStatus = res.data?.order_status || newStatus;
+        success(`Order status updated to ${canonicalStatus}`);
         setOrders((prev) =>
-          prev.map((o) => (o.order_id === orderId ? { ...o, order_status: newStatus } : o))
+          prev.map((o) =>
+            o.order_id === orderId || o.id === orderId || o.order_number === orderId
+              ? { ...o, order_status: canonicalStatus }
+              : o
+          )
         );
-        if (selectedOrder && selectedOrder.order_id === orderId) {
-          setSelectedOrder((prev) => ({ ...prev, order_status: newStatus }));
+        if (
+          selectedOrder &&
+          (selectedOrder.order_id === orderId || selectedOrder.id === orderId || selectedOrder.order_number === orderId)
+        ) {
+          setSelectedOrder((prev) => ({ ...prev, order_status: canonicalStatus }));
         }
       }
     } catch (err) {
@@ -110,7 +119,7 @@ const AdminOrders = () => {
 
           {/* Status Filter Pills */}
           <div className="flex flex-wrap items-center gap-1">
-            {['all', 'PLACED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((st) => (
+            {['all', 'PLACED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -120,7 +129,7 @@ const AdminOrders = () => {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {st === 'all' ? 'All' : st}
+                {st === 'all' ? 'All' : st.replace(/_/g, ' ')}
               </button>
             ))}
           </div>
@@ -198,16 +207,18 @@ const AdminOrders = () => {
                         {/* Status Select with direct update */}
                         <td className="py-3.5 px-4 text-center">
                           <select
-                            value={ord.order_status}
-                            onChange={(e) => handleStatusChange(ord.order_id, e.target.value)}
+                            value={normalizeTimelineStatus(ord.order_status)}
+                            onChange={(e) => handleStatusChange(ord.order_id || ord.id, e.target.value)}
                             className={`px-2 py-1 rounded-btn text-[11px] font-bold border focus:outline-none cursor-pointer transition-colors ${
-                              ord.order_status === 'DELIVERED'
+                              normalizeTimelineStatus(ord.order_status) === 'DELIVERED'
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : ord.order_status === 'CANCELLED'
+                                : normalizeTimelineStatus(ord.order_status) === 'CANCELLED'
                                 ? 'bg-red-50 text-red-800 border-red-200'
-                                : ord.order_status === 'SHIPPED'
+                                : normalizeTimelineStatus(ord.order_status) === 'SHIPPED'
                                 ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                : ord.order_status === 'PROCESSING'
+                                : normalizeTimelineStatus(ord.order_status) === 'OUT_FOR_DELIVERY'
+                                ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                : normalizeTimelineStatus(ord.order_status) === 'PROCESSING'
                                 ? 'bg-purple-50 text-purple-800 border-purple-200'
                                 : 'bg-amber-50 text-amber-800 border-amber-200'
                             }`}
@@ -215,8 +226,10 @@ const AdminOrders = () => {
                             <option value="PLACED">PLACED</option>
                             <option value="PROCESSING">PROCESSING</option>
                             <option value="SHIPPED">SHIPPED</option>
+                            <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
                             <option value="DELIVERED">DELIVERED</option>
                             <option value="CANCELLED">CANCELLED</option>
+                            <option value="RETURNED">RETURNED</option>
                           </select>
                         </td>
 
@@ -286,7 +299,7 @@ const AdminOrders = () => {
               </div>
               <div className="flex justify-between pt-1 border-t border-gray-200">
                 <span className="text-brand-muted">Fulfillment Status:</span>
-                <span className="font-bold text-brand-indigo">{selectedOrder.order_status}</span>
+                <span className="font-bold text-brand-indigo">{normalizeTimelineStatus(selectedOrder.order_status)}</span>
               </div>
             </div>
 
